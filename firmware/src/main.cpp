@@ -4,7 +4,7 @@
 // Funcionamento:
 //  - Dorme em sono profundo quase o tempo todo (economia de bateria).
 //  - Acorda quando o ADXL345 sente movimento (pino INT1) ou pelo relógio
-//    (mensagem de vida a cada 6 h, ou posição a cada 1 min no modo roubo).
+//    (mensagem de vida 1 vez por dia, ou posição a cada 1 min no modo roubo).
 //  - Movimento confirmado: avisa a plataforma na hora com a última posição
 //    conhecida, depois liga o GPS e manda a posição atual.
 //  - Sem internet: manda SMS direto para os telefones cadastrados e guarda o

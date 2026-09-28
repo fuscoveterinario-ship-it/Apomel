@@ -14,7 +14,7 @@
 #define NETWORK_APN    "zap.vivo.com.br"
 
 // Valores iniciais; depois a plataforma manda os valores atuais em cada resposta.
-#define DEFAULT_HEARTBEAT_MIN     360   // mensagem de vida a cada 6 horas
+#define DEFAULT_HEARTBEAT_MIN     1440  // mensagem de vida 1 vez por dia (24 h)
 #define DEFAULT_THEFT_INTERVAL_S  60    // no modo roubo, posição a cada 1 minuto
 
 // Sensibilidade do movimento (ADXL345: 62,5 mg por unidade). 8 = 0,5 g.

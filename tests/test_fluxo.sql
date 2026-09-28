@@ -103,7 +103,11 @@ exception when sqlstate 'P0002' then raise notice 'ok: token inválido recusado'
 end $$;
 
 -- 7) Rastreador em silêncio gera aviso "sem comunicação"; voltar a falar encerra.
-update public.colmeia_devices set mode = 'normal', last_seen_at = now() - interval '2 days';
+select pg_temp.check((select heartbeat_min from public.colmeia_devices where id = 'CS-0001') = 1440,
+  'mensagem de vida 1 vez por dia por padrão');
+update public.colmeia_devices set mode = 'normal', last_seen_at = now() - interval '47 hours';
+select pg_temp.check(public.colmeia_escalate_alerts() = 0, 'um dia sem mensagem ainda não é aviso');
+update public.colmeia_devices set last_seen_at = now() - interval '49 hours';
 select pg_temp.check(public.colmeia_escalate_alerts() = 1, 'aviso de rastreador sem comunicação');
 select pg_temp.check(public.colmeia_escalate_alerts() = 0, 'aviso sem comunicação não repete');
 select public.colmeia_ingest_event('CS-0001', 7, 'vida', null, null, 3900);
