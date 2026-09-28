@@ -1,7 +1,7 @@
 # Configuração das funções para o Supabase CLI (supabase functions deploy).
-[functions.ingest]
+[functions.colmeia-ingest]
 # O rastreador não tem login: ele se autentica pela assinatura HMAC.
 verify_jwt = false
 
-[functions.dispatch]
+[functions.colmeia-dispatch]
 verify_jwt = true

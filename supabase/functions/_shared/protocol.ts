@@ -1,6 +1,6 @@
 // Protocolo entre o rastreador e a plataforma.
 //
-// O rastreador faz POST em /functions/v1/ingest com:
+// O rastreador faz POST em /functions/v1/colmeia-ingest com:
 //   cabeçalho  x-device-id: CS-0001
 //   cabeçalho  x-signature: HMAC-SHA256(segredo do rastreador, corpo) em hexadecimal
 //   corpo      {"events":[{"seq":12,"t":"movimento","lat":-25.4,"lon":-49.2,"bat":4010,"sig":18}]}

@@ -1,5 +1,24 @@
 # Guia de instalação — Colmeia Segura
 
+## Instalação atual (já feita)
+
+O Colmeia Segura está instalado **dentro do projeto Supabase "Rastreia Moura"**
+(`vmzmthtsxiwwjtpupclv`, região São Paulo), **separado** dos outros sistemas:
+
+- tudo o que é do Colmeia tem o prefixo `colmeia_` (tabelas, funções, agendamentos);
+- funções do servidor: `colmeia-ingest` (recebe os rastreadores) e `colmeia-dispatch` (envia WhatsApp/SMS);
+- agendamentos (pg_cron): `colmeia-escalonamento` e `colmeia-envio`, a cada minuto;
+- nenhuma tabela, função ou permissão dos outros sistemas (mel_, lat_, aprotunas_…) foi alterada.
+
+O login usa os mesmos usuários do projeto. **Não altere o "Site URL" nem os modelos de e-mail**
+do Authentication (os outros sistemas usam): apenas **adicione** o endereço do site do Colmeia em
+*Authentication → URL Configuration → Redirect URLs*. O login funciona clicando no link do e-mail.
+
+Falta: publicar o site (passo 5), trocar `https://colmeiasegura.example` pelo endereço real
+(passo 1.3) e contratar WhatsApp/SMS (passo 4). Até lá as mensagens ficam como "simulado".
+
+---
+
 Ordem sugerida: **1 a 6** (plataforma) já podem ser feitos antes de a placa chegar.
 Com a plataforma no ar, dá para testar tudo com o **simulador** ou com um **celular** (passo 7).
 
@@ -13,7 +32,7 @@ Com a plataforma no ar, dá para testar tudo com o **simulador** ou com um **cel
    (Quem usa o Supabase CLI pode fazer `supabase link` e `supabase db push`.)
 3. Ainda no SQL Editor, informe o endereço do site (passo 5):
    ```sql
-   update public.settings set value = 'https://SEU-SITE' where key = 'site_url';
+   update public.colmeia_settings set value = 'https://SEU-SITE' where key = 'site_url';
    ```
    Os links das mensagens de alerta usam esse endereço.
 
@@ -29,8 +48,8 @@ Em **Authentication → URL Configuration**, coloque o endereço do site em *Sit
 Com o [Supabase CLI](https://supabase.com/docs/guides/cli) instalado, na pasta do projeto:
 
 ```bash
-supabase functions deploy ingest --no-verify-jwt   # a placa se autentica pela assinatura
-supabase functions deploy dispatch
+supabase functions deploy colmeia-ingest --no-verify-jwt   # a placa se autentica pela assinatura
+supabase functions deploy colmeia-dispatch
 ```
 
 ## 4. WhatsApp e SMS
@@ -65,7 +84,7 @@ parâmetros **na ordem indicada**:
 create extension if not exists pg_net;
 select cron.schedule('colmeia-envio', '* * * * *', $$
   select net.http_post(
-    url     := 'https://SEU-PROJETO.supabase.co/functions/v1/dispatch',
+    url     := 'https://SEU-PROJETO.supabase.co/functions/v1/colmeia-dispatch',
     headers := jsonb_build_object('Authorization', 'Bearer SUA-CHAVE-ANON',
                                   'Content-Type', 'application/json'),
     body    := '{}'::jsonb)
@@ -85,7 +104,7 @@ $$);
 node tools/novo-rastreador.mjs CS-0001 https://SEU-SITE
 ```
 O comando mostra:
-1. um `select public.provision_device(...)` → rode no SQL Editor;
+1. um `select public.colmeia_provision_device(...)` → rode no SQL Editor;
 2. `DEVICE_ID` e `DEVICE_SECRET` → vão no `firmware/include/config.h`;
 3. o **link do QR Code técnico** → gere o QR Code (qualquer gerador) e cole no rastreador.
 
@@ -93,7 +112,7 @@ O comando mostra:
 
 **Simulador (computador):**
 ```bash
-API_URL=https://SEU-PROJETO.supabase.co/functions/v1/ingest \
+API_URL=https://SEU-PROJETO.supabase.co/functions/v1/colmeia-ingest \
 DEVICE_ID=CS-SIMULADO DEVICE_SECRET=... node tools/simulador.mjs movimento -25.43 -49.27
 ```
 

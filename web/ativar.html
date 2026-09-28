@@ -57,7 +57,7 @@ $("#f-ativar").code.value = params.get("c") || "";
 ensureLogin($("#login"), async () => {
   show("#login", false);
   show("#passo-dados");
-  const { data } = await sb.from("apiaries").select("name").order("name");
+  const { data } = await sb.from("colmeia_apiaries").select("name").order("name");
   $("#apiarios").innerHTML = (data || []).map((a) => `<option value="${esc(a.name)}">`).join("");
 });
 
@@ -72,7 +72,7 @@ $("#f-ativar").onsubmit = async (ev) => {
   }
   f.querySelector("button").disabled = true;
   const startedAt = Date.now();
-  const { error } = await sb.rpc("activate_device", {
+  const { error } = await sb.rpc("colmeia_activate_device", {
     p_device_id: deviceId, p_claim_code: f.code.value, p_apiary_name: f.apiary.value,
     p_hive_label: f.hive.value, p_primary_phone: p1, p_secondary_phone: p2,
   });
@@ -86,7 +86,7 @@ $("#f-ativar").onsubmit = async (ev) => {
 // Espera o rastreador mandar uma mensagem depois da ativação.
 async function waitFirstMessage(sinceMs) {
   for (;;) {
-    const { data } = await sb.from("devices")
+    const { data } = await sb.from("colmeia_devices")
       .select("last_seen_at,last_battery_mv,last_signal,last_lat,last_lon").eq("id", deviceId).single();
     if (data?.last_seen_at && new Date(data.last_seen_at).getTime() > sinceMs) {
       show("#teste-dados");

@@ -19,7 +19,7 @@ o contato secundário é avisado e o rastreador entra em **modo roubo** (posiç�
 | Pasta | O que tem |
 |---|---|
 | `firmware/` | Programa da placa (PlatformIO): sono profundo, acorda com movimento, confirma se não foi só uma batida, GPS, envio HTTPS assinado, SMS de emergência, modo roubo. |
-| `supabase/` | Banco de dados (tabelas, regras de acesso, alerta e escalonamento em 5 min) e as funções `ingest` (recebe o rastreador) e `dispatch` (envia WhatsApp/SMS). |
+| `supabase/` | Banco de dados (tabelas, regras de acesso, alerta e escalonamento em 5 min) e as funções `colmeia-ingest` (recebe o rastreador) e `colmeia-dispatch` (envia WhatsApp/SMS). |
 | `web/` | Telas: `ativar.html` (QR Code), `alerta.html` (Sou eu / Possível roubo / mapa), `painel.html` (meus rastreadores), `celular-teste.html` (celular como rastreador de teste). |
 | `tools/` | `novo-rastreador.mjs` (gera segredo, código de ativação e link do QR Code) e `simulador.mjs` (finge ser a placa). |
 | `tests/` | Testes do banco (fluxo completo de roubo) e do protocolo. |

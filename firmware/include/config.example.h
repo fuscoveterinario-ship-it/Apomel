@@ -8,7 +8,7 @@
 #define DEVICE_SECRET  "cole-aqui-o-segredo-gerado"
 
 // Endereço da função que recebe os eventos no Supabase.
-#define API_URL        "https://SEU-PROJETO.supabase.co/functions/v1/ingest"
+#define API_URL        "https://vmzmthtsxiwwjtpupclv.supabase.co/functions/v1/colmeia-ingest"
 
 // APN do chip. Vivo: "zap.vivo.com.br". Claro: "claro.com.br". TIM: "timbrasil.br".
 #define NETWORK_APN    "zap.vivo.com.br"

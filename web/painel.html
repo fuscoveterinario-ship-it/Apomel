@@ -33,9 +33,9 @@ function statusDe(d, alertas) {
 
 async function carregar() {
   const [{ data: devs, error }, { data: alertas }, { data: apiarios }] = await Promise.all([
-    sb.from("devices").select("*").order("id"),
-    sb.from("alerts").select("device_id,kind,status,opened_at").order("opened_at", { ascending: false }).limit(200),
-    sb.from("apiaries").select("id,name"),
+    sb.from("colmeia_devices").select("*").order("id"),
+    sb.from("colmeia_alerts").select("device_id,kind,status,opened_at").order("opened_at", { ascending: false }).limit(200),
+    sb.from("colmeia_apiaries").select("id,name"),
   ]);
   if (error) { $("#lista").innerHTML = `<p class="erro card">${esc(errorText(error))}</p>`; return; }
   const nomeApiario = Object.fromEntries((apiarios || []).map((a) => [a.id, a.name]));
@@ -62,12 +62,12 @@ async function carregar() {
   }).join("");
 
   document.querySelectorAll("[data-mnt]").forEach((b) => b.onclick = async () => {
-    const { error } = await sb.rpc("set_maintenance", { p_device_id: b.dataset.mnt, p_minutes: 120 });
+    const { error } = await sb.rpc("colmeia_set_maintenance", { p_device_id: b.dataset.mnt, p_minutes: 120 });
     if (error) alert(errorText(error)); else carregar();
   });
   document.querySelectorAll("[data-fim]").forEach((b) => b.onclick = async () => {
     if (!confirm("Encerrar o rastreamento intensivo desta caixa?")) return;
-    const { error } = await sb.rpc("end_theft_mode", { p_device_id: b.dataset.fim });
+    const { error } = await sb.rpc("colmeia_end_theft_mode", { p_device_id: b.dataset.fim });
     if (error) alert(errorText(error)); else carregar();
   });
 

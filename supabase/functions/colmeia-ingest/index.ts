@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
     return reply({ ok: false, error: "requisição inválida" }, 400);
   }
 
-  const { data: secretRow } = await db.from("device_secrets").select("secret").eq("device_id", deviceId)
+  const { data: secretRow } = await db.from("colmeia_device_secrets").select("secret").eq("device_id", deviceId)
     .maybeSingle();
   // Mesma resposta para rastreador inexistente e assinatura errada.
   if (!secretRow || !(await verifySignature(secretRow.secret, raw, req.headers.get("x-signature")))) {
@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
 
   let config: Record<string, unknown> = {};
   for (const ev of events) {
-    const { data, error } = await db.rpc("ingest_event", {
+    const { data, error } = await db.rpc("colmeia_ingest_event", {
       p_device_id: deviceId,
       p_seq: ev.seq,
       p_type: ev.type,
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
       p_payload: ev.payload,
     });
     if (error) {
-      console.error("ingest_event", deviceId, ev.seq, error.message);
+      console.error("colmeia_ingest_event", deviceId, ev.seq, error.message);
       return reply({ ok: false, error: "falha ao registrar" }, 500);
     }
     config = data as Record<string, unknown>;

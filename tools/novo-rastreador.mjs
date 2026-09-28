@@ -19,7 +19,7 @@ const url = `${site.replace(/\/$/, "")}/ativar.html?d=${encodeURIComponent(devic
 
 console.log(`
 == 1) Rode no Supabase (SQL Editor) ==
-select public.provision_device('${deviceId}', '${secret}', '${claim}');
+select public.colmeia_provision_device('${deviceId}', '${secret}', '${claim}');
 
 == 2) Coloque no firmware/include/config.h ==
 #define DEVICE_ID      "${deviceId}"

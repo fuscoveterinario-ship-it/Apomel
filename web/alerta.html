@@ -53,7 +53,7 @@ const TEXTOS = {
 };
 
 async function carregar(acao = "ver") {
-  const { data, error } = await sb.rpc("respond_alert", { p_token: token, p_action: acao });
+  const { data, error } = await sb.rpc("colmeia_respond_alert", { p_token: token, p_action: acao });
   show("#carregando", false);
   if (error) {
     $("#erro").textContent = errorText(error);
@@ -108,7 +108,7 @@ document.querySelectorAll("#acoes button").forEach((b) => {
     b.disabled = false;
     if (data) {
       $("#acao-msg").textContent = "Resposta registrada.";
-      sb.functions.invoke("dispatch").catch(() => {}); // envia avisos na hora
+      sb.functions.invoke("colmeia-dispatch").catch(() => {}); // envia avisos na hora
     }
   };
 });

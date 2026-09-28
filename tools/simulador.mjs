@@ -13,7 +13,7 @@ const { API_URL, DEVICE_ID, DEVICE_SECRET } = process.env;
 const [type = "vida", lat = "-25.4284", lon = "-49.2733"] = process.argv.slice(2);
 if (!API_URL || !DEVICE_ID || !DEVICE_SECRET) {
   console.error("Defina API_URL, DEVICE_ID e DEVICE_SECRET. Ex.:\n" +
-    "  API_URL=https://xxx.supabase.co/functions/v1/ingest DEVICE_ID=CS-0001 DEVICE_SECRET=... \\\n" +
+    "  API_URL=https://xxx.supabase.co/functions/v1/colmeia-ingest DEVICE_ID=CS-0001 DEVICE_SECRET=... \\\n" +
     "  node tools/simulador.mjs movimento");
   process.exit(1);
 }
