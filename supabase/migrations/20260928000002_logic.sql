@@ -68,6 +68,8 @@ returns jsonb language sql stable security definer set search_path = public as $
     'mode', d.mode,
     'heartbeat_min', d.heartbeat_min,
     'theft_interval_s', d.theft_interval_s,
+    'theft_sms_interval_s', d.theft_sms_interval_s,
+    'caixa', coalesce(d.hive_label, d.id),
     'maintenance', coalesce(d.maintenance_until > now(), false),
     -- Enquanto houver alerta de movimento aberto, o rastreador continua vigiando.
     'alert_open', exists (select 1 from public.colmeia_alerts a

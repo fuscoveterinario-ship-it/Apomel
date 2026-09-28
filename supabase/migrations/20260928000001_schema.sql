@@ -32,6 +32,8 @@ create table public.colmeia_devices (
   maintenance_until  timestamptz,
   heartbeat_min      integer not null default 1440 check (heartbeat_min between 15 and 1440),
   theft_interval_s   integer not null default 60 check (theft_interval_s between 30 and 3600),
+  -- Modo roubo sem internet: SMS com a posição a cada N segundos (5 min).
+  theft_sms_interval_s integer not null default 300 check (theft_sms_interval_s between 120 and 3600),
   last_seen_at       timestamptz,
   last_lat           double precision,
   last_lon           double precision,

@@ -16,6 +16,7 @@
 // Valores iniciais; depois a plataforma manda os valores atuais em cada resposta.
 #define DEFAULT_HEARTBEAT_MIN     1440  // mensagem de vida 1 vez por dia (24 h)
 #define DEFAULT_THEFT_INTERVAL_S  60    // no modo roubo, posição a cada 1 minuto
+#define DEFAULT_THEFT_SMS_INTERVAL_S 300 // no modo roubo sem internet, SMS com a posição a cada 5 min
 
 // Sensibilidade do movimento (ADXL345: 62,5 mg por unidade). 8 = 0,5 g.
 #define MOTION_THRESHOLD          8

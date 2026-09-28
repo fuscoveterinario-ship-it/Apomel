@@ -10,7 +10,10 @@
 //  - Sem internet: manda SMS direto para os telefones cadastrados e guarda o
 //    evento para reenviar depois (o SMS também será o caminho via satélite
 //    Starlink/Vivo quando o serviço for liberado).
-//  - Enquanto houver alerta aberto ou modo roubo, fica acordado enviando posição.
+//  - Sem internet e a caixa continua se movendo: entra sozinho em "modo roubo
+//    local" e manda SMS com a posição a cada 5 min até a internet voltar.
+//  - Enquanto houver alerta aberto ou modo roubo, fica acordado enviando posição;
+//    se a caixa ficar parada 30 min, passa a acordar a cada 30 min.
 //  - Wi-Fi e Bluetooth ficam desligados.
 
 #include <Arduino.h>
@@ -40,7 +43,11 @@ TinyGsm modem(debugger);
 TinyGsm modem(SerialAT);
 #endif
 
-#define FW_VERSION "0.1.0"
+#define FW_VERSION "0.2.0"
+
+#ifndef DEFAULT_THEFT_SMS_INTERVAL_S
+#define DEFAULT_THEFT_SMS_INTERVAL_S 300
+#endif
 
 // ---------------------------------------------------------------------------
 // Estado guardado na memória RTC (sobrevive ao sono profundo, não a um desligamento)
@@ -53,12 +60,18 @@ struct QueuedEvent {
   time_t at;
 };
 
-constexpr uint32_t STATE_MAGIC = 0xC0151E6A;
+constexpr uint32_t STATE_MAGIC = 0xC0151E6B;  // muda quando a estrutura abaixo muda
+constexpr uint32_t STILL_SLEEP_S = 30 * 60;   // roubo com a caixa parada: acorda a cada 30 min
+constexpr int LOW_BATTERY_MV = 3300;
 constexpr int QUEUE_SIZE = 10;
 
 struct State {
   uint32_t magic;
-  bool theftMode;
+  bool theftMode;       // modo roubo mandado pela plataforma
+  bool localTheft;      // modo roubo decidido pela própria placa, sem internet
+  time_t localTheftSince;
+  time_t lastSmsAt;
+  uint16_t smsIntervalS;
   bool alertOpen;
   uint16_t heartbeatMin;
   uint16_t theftIntervalS;
@@ -80,6 +93,9 @@ bool modemReady = false;
 bool netReady = false;
 bool gpsOn = false;
 int signalQuality = 99;
+uint32_t lastNetFailMs = 0;  // última vez que a internet do chip falhou
+
+bool inTheft() { return st.theftMode || st.localTheft; }
 
 time_t now_s() { return time(nullptr); }
 
@@ -305,7 +321,15 @@ void applyConfig(const String& json) {
   if ((v = cJSON_GetObjectItem(root, "mode")) && cJSON_IsString(v)) st.theftMode = strcmp(v->valuestring, "roubo") == 0;
   if ((v = cJSON_GetObjectItem(root, "hb")) && cJSON_IsNumber(v)) st.heartbeatMin = constrain(v->valueint, 15, 1440);
   if ((v = cJSON_GetObjectItem(root, "ti")) && cJSON_IsNumber(v)) st.theftIntervalS = constrain(v->valueint, 30, 3600);
-  if ((v = cJSON_GetObjectItem(root, "al"))) st.alertOpen = cJSON_IsTrue(v);
+  if ((v = cJSON_GetObjectItem(root, "si")) && cJSON_IsNumber(v)) st.smsIntervalS = constrain(v->valueint, 120, 3600);
+  if ((v = cJSON_GetObjectItem(root, "al"))) {
+    st.alertOpen = cJSON_IsTrue(v);
+    // Alerta encerrado na plataforma ("Sou eu" ou caixa recuperada): fim do roubo local.
+    if (!st.alertOpen) st.localTheft = false;
+  }
+  if ((v = cJSON_GetObjectItem(root, "cx")) && cJSON_IsString(v) && prefs.getString("cx", "") != v->valuestring) {
+    prefs.putString("cx", v->valuestring);
+  }
   if ((v = cJSON_GetObjectItem(root, "mnt"))) st.maintenanceUntil = cJSON_IsTrue(v) ? now_s() + 30 * 60 : 0;
   if ((v = cJSON_GetObjectItem(root, "sms")) && cJSON_IsArray(v)) saveSmsNumbers(v);
   cJSON_Delete(root);
@@ -315,7 +339,10 @@ void applyConfig(const String& json) {
 
 bool sendQueue() {
   if (st.qlen == 0) return true;
-  if (!networkUp(90000)) return false;
+  if (!networkUp(90000)) {
+    lastNetFailMs = millis() | 1;
+    return false;
+  }
 
   String body = buildBody();
   String sig = hmacHex(body);
@@ -342,16 +369,30 @@ bool sendQueue() {
   return ok;
 }
 
-// SMS de emergência quando a internet do chip falha.
-void sendSmsAlert() {
+// SMS usa o alfabeto básico do celular: tira acentos ("Caixa São João" → "Caixa Sao Joao").
+void asciiCopy(const char* in, char* out, size_t n) {
+  size_t o = 0;
+  for (const unsigned char* p = (const unsigned char*)in; *p && o + 1 < n; p++) {
+    if (*p < 0x80) {
+      out[o++] = *p;
+    } else if (*p == 0xC3 && p[1]) {
+      unsigned char c = *++p;
+      char r = 0;
+      if (c >= 0xA0 && c <= 0xA5) r = 'a'; else if (c == 0xA7) r = 'c';
+      else if (c >= 0xA8 && c <= 0xAB) r = 'e'; else if (c >= 0xAC && c <= 0xAF) r = 'i';
+      else if (c >= 0xB2 && c <= 0xB6) r = 'o'; else if (c >= 0xB9 && c <= 0xBC) r = 'u';
+      else if (c >= 0x80 && c <= 0x85) r = 'A'; else if (c == 0x87) r = 'C';
+      else if (c >= 0x88 && c <= 0x8B) r = 'E'; else if (c >= 0x8C && c <= 0x8F) r = 'I';
+      else if (c >= 0x92 && c <= 0x96) r = 'O'; else if (c >= 0x99 && c <= 0x9C) r = 'U';
+      if (r) out[o++] = r;
+    }
+  }
+  out[o] = 0;
+}
+
+void sendSmsToAll(const char* text) {
   String list = prefs.getString("sms", "");
   if (list.isEmpty() || !modemOn()) return;
-  String text = "ALERTA BEE GUARD: rastreador " DEVICE_ID " detectou movimento. Sem internet no local.";
-  if (st.hasFix) {
-    char pos[80];
-    snprintf(pos, sizeof(pos), " Ultima posicao: https://maps.google.com/?q=%.6f,%.6f", st.lastLat, st.lastLon);
-    text += pos;
-  }
   int from = 0;
   while (from < (int)list.length()) {
     int comma = list.indexOf(',', from);
@@ -361,6 +402,34 @@ void sendSmsAlert() {
     trace("SMS para %s: %s", phone.c_str(), sent ? "enviado" : "falhou");
     from = comma + 1;
   }
+}
+
+// SMS com a posição, quando a internet do chip falha (também será o caminho
+// da Starlink no celular). theft=false: primeiro aviso; true: acompanhamento do roubo.
+void sendPositionSms(bool theft) {
+  char caixa[40];
+  asciiCopy(prefs.getString("cx", DEVICE_ID).c_str(), caixa, sizeof(caixa));
+  int pct = constrain((batteryMv() - 3300) * 100 / 900, 0, 100);
+  char where[80];
+  if (st.hasFix) snprintf(where, sizeof(where), "https://maps.google.com/?q=%.6f,%.6f", st.lastLat, st.lastLon);
+  else strlcpy(where, "posicao ainda desconhecida", sizeof(where));
+  char text[200];
+  if (theft) {
+    snprintf(text, sizeof(text), "BEE GUARD ROUBO %s: %s bateria %d%%", caixa, where, pct);
+  } else {
+    snprintf(text, sizeof(text), "ALERTA BEE GUARD: %s foi movimentada. Sem internet no local. Posicao: %s bateria %d%%",
+             caixa, where, pct);
+  }
+  sendSmsToAll(text);
+  st.lastSmsAt = now_s();
+}
+
+// Distância aproximada em metros (suficiente para saber se a caixa saiu do lugar).
+float distanceM(float lat1, float lon1, float lat2, float lon2) {
+  const float k = 111320.0f;
+  float dx = (lon2 - lon1) * k * cosf((lat1 + lat2) * 0.5f * (float)M_PI / 180.0f);
+  float dy = (lat2 - lat1) * k;
+  return sqrtf(dx * dx + dy * dy);
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +477,7 @@ void sleepFor(uint32_t seconds, bool wakeOnMotion) {
   modemOffAndHold();
   if (accelOk) {
     Accel rest;
-    if (!st.theftMode && readAverage(rest)) {
+    if (!inTheft() && readAverage(rest)) {
       st.ref = rest;
       st.hasRef = true;
     }
@@ -435,33 +504,67 @@ void sleepUntilHeartbeat() {
 
 // ---------------------------------------------------------------------------
 // Vigilância: alerta aberto ou modo roubo → fica acordado enviando posição.
+// Sem internet: SMS com a posição a cada 5 min (modo roubo local).
 // ---------------------------------------------------------------------------
 void watchLoop() {
-  const uint32_t alertWatchLimitS = 15 * 60;  // sem roubo, vigia no máximo 15 min
+  const uint32_t alertWatchLimitMs = 15 * 60 * 1000UL;  // alerta sem roubo: vigia até 15 min
+  const uint32_t stillLimitMs = STILL_SLEEP_S * 1000UL;  // roubo com caixa parada: dorme entre posições
+  const uint32_t netRetryMs = 5 * 60 * 1000UL;           // sem internet: tenta de novo a cada 5 min
   uint32_t start = millis();
-  int failures = 0;
+  uint32_t lastMove = millis();
+  bool haveOrigin = st.hasFix;
+  float oLat = st.lastLat, oLon = st.lastLon;
 
-  while (st.theftMode || st.alertOpen) {
-    if (!st.theftMode && millis() - start > alertWatchLimitS * 1000UL) break;
-    if (batteryMv() < 3300) {
-      trace("bateria muito baixa: interrompe vigilância contínua");
+  while (inTheft() || st.alertOpen) {
+    if (!inTheft() && millis() - start > alertWatchLimitMs) break;
+    if (batteryMv() < LOW_BATTERY_MV) {
+      trace("bateria muito baixa: interrompe a vigilância contínua");
+      if (inTheft()) sendPositionSms(true);
       break;
     }
-    uint32_t interval = st.theftMode ? st.theftIntervalS : 60;
+    uint32_t interval = inTheft() ? st.theftIntervalS : 60;
     uint32_t t0 = millis();
 
-    getFix(std::min<uint32_t>(interval, 45));
+    // A caixa continua se movendo? (acelerômetro ou mais de 150 m de onde estava)
+    bool moved = accelOk && accel.takeActivity();
+    if (getFix(std::min<uint32_t>(interval, 45))) {
+      if (!haveOrigin) {
+        oLat = st.lastLat; oLon = st.lastLon; haveOrigin = true;
+      } else if (distanceM(oLat, oLon, st.lastLat, st.lastLon) > 150) {
+        moved = true;
+        oLat = st.lastLat; oLon = st.lastLon;
+      }
+    }
+    if (moved) lastMove = millis();
     enqueue("posicao", true);
-    if (sendQueue()) {
-      failures = 0;
-    } else if (++failures >= 10) {
-      trace("10 falhas seguidas: volta a dormir entre as tentativas");
+
+    bool sent = false;
+    if (netReady || !lastNetFailMs || millis() - lastNetFailMs >= netRetryMs) sent = sendQueue();
+
+    if (!sent) {
+      if (!inTheft() && st.alertOpen && moved) {
+        st.localTheft = true;
+        st.localTheftSince = now_s();
+        trace("sem internet e a caixa continua se movendo: modo roubo local");
+      }
+      if (inTheft() && now_s() - st.lastSmsAt >= (time_t)st.smsIntervalS) sendPositionSms(true);
+    }
+
+    if (inTheft() && millis() - lastMove > stillLimitMs) {
+      trace("caixa parada há 30 min: passa a acordar a cada 30 min");
       break;
     }
 
     uint32_t spent = millis() - t0;
     if (spent < interval * 1000UL) delay(interval * 1000UL - spent);
   }
+}
+
+// Depois de falar com a plataforma: decide quanto tempo dormir.
+void finishAndSleep() {
+  st.nextHeartbeat = 0;  // recomeça a contagem da mensagem de vida
+  if (batteryMv() >= LOW_BATTERY_MV && inTheft()) sleepFor(STILL_SLEEP_S, true);
+  sleepUntilHeartbeat();
 }
 
 // ---------------------------------------------------------------------------
@@ -489,11 +592,14 @@ void setup() {
     st.magic = STATE_MAGIC;
     st.heartbeatMin = DEFAULT_HEARTBEAT_MIN;
     st.theftIntervalS = DEFAULT_THEFT_INTERVAL_S;
+    st.smsIntervalS = DEFAULT_THEFT_SMS_INTERVAL_S;
   }
+  // Roubo local sem nenhum contato com a plataforma há mais de 1 dia: encerra.
+  if (st.localTheft && now_s() - st.localTheftSince > 24 * 3600) st.localTheft = false;
   trace("Bee Guard %s | %s | acordou por %d | bateria %d mV", FW_VERSION, DEVICE_ID, cause, batteryMv());
 
   // 1) Acordou por movimento
-  if (cause == ESP_SLEEP_WAKEUP_EXT0 && !st.theftMode) {
+  if (cause == ESP_SLEEP_WAKEUP_EXT0 && !inTheft()) {
     if (st.maintenanceUntil > now_s()) {
       trace("em manutenção: movimento ignorado");
       sleepUntilHeartbeat();
@@ -503,34 +609,33 @@ void setup() {
       sleepUntilHeartbeat();
     }
     enqueue("movimento", true);  // última posição conhecida, para avisar já
-    if (!sendQueue()) sendSmsAlert();
+    bool online = sendQueue();
+    if (!online) sendPositionSms(false);
     if (getFix(90)) enqueue("posicao", true);
-    sendQueue();
+    if (online) sendQueue();
     st.alertOpen = true;  // vigia até a plataforma dizer que acabou
     watchLoop();
-    st.nextHeartbeat = 0;
-    if (st.theftMode) sleepFor(st.theftIntervalS, false);
-    sleepUntilHeartbeat();
+    finishAndSleep();
   }
 
-  // 2) Ligou agora (teste de ativação) ou hora da mensagem de vida / posição
+  // 2) Em roubo (plataforma ou local): segue mandando a posição
+  if (inTheft()) {
+    watchLoop();
+    finishAndSleep();
+  }
+
+  // 3) Ligou agora (teste de ativação) ou hora da mensagem de vida
   if (firstBoot || cause == ESP_SLEEP_WAKEUP_UNDEFINED) {
     enqueue("online", false);
     sendQueue();  // resposta rápida para a tela de ativação
     if (getFix(120)) enqueue("posicao", true);
-  } else if (st.theftMode) {
-    getFix(60);
-    enqueue("posicao", true);
   } else {
     getFix(60);
     enqueue("vida", true);
   }
   sendQueue();
   watchLoop();
-
-  st.nextHeartbeat = 0;  // recomeça a contagem após falar com a plataforma
-  if (st.theftMode) sleepFor(st.theftIntervalS, false);
-  sleepUntilHeartbeat();
+  finishAndSleep();
 }
 
 void loop() {

@@ -94,6 +94,8 @@ export function compactConfig(cfg: Record<string, unknown>) {
     mode: cfg.mode,
     hb: cfg.heartbeat_min,
     ti: cfg.theft_interval_s,
+    si: cfg.theft_sms_interval_s,
+    cx: cfg.caixa,
     mnt: cfg.maintenance,
     al: cfg.alert_open,
     sms: cfg.sms,

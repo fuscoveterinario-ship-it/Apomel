@@ -57,6 +57,9 @@ select pg_temp.check((select count(*) from public.colmeia_alerts where kind = 'm
   'movimento abre alerta pendente');
 select pg_temp.check((public.colmeia_ingest_event('CS-0001', 2, 'movimento')->>'alert_open')::boolean,
   'rastreador sabe que há alerta aberto');
+select pg_temp.check((public.colmeia_ingest_event('CS-0001', 2, 'movimento')->>'caixa') = 'Caixa 12'
+                     and (public.colmeia_ingest_event('CS-0001', 2, 'movimento')->>'theft_sms_interval_s')::int = 300,
+  'rastreador recebe o nome da caixa e o intervalo do SMS de roubo');
 select pg_temp.check((select count(*) from public.colmeia_notifications
                       where to_phone = '+5541999990001' and template = 'alerta_movimento') = 2,
   'WhatsApp e SMS na fila para o principal');

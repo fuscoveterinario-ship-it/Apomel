@@ -40,8 +40,9 @@ test("recusa corpo inválido", () => {
 
 test("resposta compacta para o rastreador", () => {
   assert.deepEqual(
-    compactConfig({ ack: 7, mode: "roubo", heartbeat_min: 360, theft_interval_s: 60, maintenance: false, alert_open: true, sms: ["+55"] }),
-    { ok: true, ack: 7, mode: "roubo", hb: 360, ti: 60, mnt: false, al: true, sms: ["+55"] },
+    compactConfig({ ack: 7, mode: "roubo", heartbeat_min: 1440, theft_interval_s: 60, theft_sms_interval_s: 300,
+      caixa: "Caixa 12", maintenance: false, alert_open: true, sms: ["+55"] }),
+    { ok: true, ack: 7, mode: "roubo", hb: 1440, ti: 60, si: 300, cx: "Caixa 12", mnt: false, al: true, sms: ["+55"] },
   );
 });
 
