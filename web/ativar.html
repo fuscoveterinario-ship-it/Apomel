@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ativar rastreador</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>Colmeia Segura<small>Ativação do rastreador</small></header>
+<main>
+  <section class="card" id="login"><p class="msg">Carregando… (precisa de internet)</p></section>
+
+  <section class="card" id="passo-dados" hidden>
+    <h2>1. Dados da caixa</h2>
+    <p class="passos">Rastreador <b id="d-id"></b>. Faça a ativação <b>num lugar com internet</b>, antes de levar a caixa ao apiário.</p>
+    <form id="f-ativar">
+      <label>Código de ativação<input name="code" required autocomplete="off"></label>
+      <label>Apiário<input name="apiary" list="apiarios" required placeholder="Ex.: Sítio Santa Rita"></label>
+      <datalist id="apiarios"></datalist>
+      <label>Caixa / colmeia<input name="hive" required placeholder="Ex.: Caixa 12"></label>
+      <label>Telefone principal (recebe o 1º alerta)<input name="phone1" type="tel" required placeholder="(41) 99999-0001"></label>
+      <label>Telefone secundário (se ninguém responder em 5 min)<input name="phone2" type="tel" placeholder="(41) 98888-0002"></label>
+      <button>Ativar</button>
+      <p class="erro" id="erro-ativar"></p>
+    </form>
+  </section>
+
+  <section class="card" id="passo-teste" hidden>
+    <h2>2. Teste de comunicação</h2>
+    <p>Coloque a bateria no rastreador (ou ligue a chave) e aguarde. A primeira mensagem pode levar até 2 minutos.</p>
+    <p id="teste-status"><span class="status aviso">Aguardando o rastreador…</span></p>
+    <div class="grid" id="teste-dados" hidden>
+      <div><span>Bateria</span><b id="t-bat"></b></div>
+      <div><span>Sinal do chip</span><b id="t-sig"></b></div>
+      <div><span>Posição</span><b id="t-pos"></b></div>
+      <div><span>Última mensagem</span><b id="t-quando"></b></div>
+    </div>
+  </section>
+
+  <section class="card" id="passo-pronto" hidden>
+    <h2>3. Pronto!</h2>
+    <p>Teste aprovado. Coloque o rastreador na caixa e leve ao apiário.
+       Se a caixa for mexida, você recebe um WhatsApp e um SMS perguntando se foi manutenção.</p>
+    <a class="btn secundario" href="painel.html">Ver meus rastreadores</a>
+  </section>
+</main>
+
+<script type="module">
+import { $, show, sb, normalizePhone, ensureLogin, errorText, batteryPct, ago, mapsLink, esc } from "./app.js";
+
+const params = new URLSearchParams(location.search);
+const deviceId = (params.get("d") || "").toUpperCase();
+$("#d-id").textContent = deviceId || "(sem código no link)";
+$("#f-ativar").code.value = params.get("c") || "";
+
+ensureLogin($("#login"), async () => {
+  show("#login", false);
+  show("#passo-dados");
+  const { data } = await sb.from("apiaries").select("name").order("name");
+  $("#apiarios").innerHTML = (data || []).map((a) => `<option value="${esc(a.name)}">`).join("");
+});
+
+$("#f-ativar").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  const p1 = normalizePhone(f.phone1.value);
+  const p2 = f.phone2.value.trim() ? normalizePhone(f.phone2.value) : null;
+  if (!p1 || (f.phone2.value.trim() && !p2)) {
+    $("#erro-ativar").textContent = "Telefone inválido. Use DDD + número, ex.: (41) 99999-0001.";
+    return;
+  }
+  f.querySelector("button").disabled = true;
+  const startedAt = Date.now();
+  const { error } = await sb.rpc("activate_device", {
+    p_device_id: deviceId, p_claim_code: f.code.value, p_apiary_name: f.apiary.value,
+    p_hive_label: f.hive.value, p_primary_phone: p1, p_secondary_phone: p2,
+  });
+  f.querySelector("button").disabled = false;
+  if (error) { $("#erro-ativar").textContent = errorText(error); return; }
+  show("#passo-dados", false);
+  show("#passo-teste");
+  waitFirstMessage(startedAt - 5 * 60 * 1000);
+};
+
+// Espera o rastreador mandar uma mensagem depois da ativação.
+async function waitFirstMessage(sinceMs) {
+  for (;;) {
+    const { data } = await sb.from("devices")
+      .select("last_seen_at,last_battery_mv,last_signal,last_lat,last_lon").eq("id", deviceId).single();
+    if (data?.last_seen_at && new Date(data.last_seen_at).getTime() > sinceMs) {
+      show("#teste-dados");
+      const pct = batteryPct(data.last_battery_mv);
+      $("#t-bat").textContent = pct === null ? "—" : `${pct}%`;
+      $("#t-sig").textContent = data.last_signal == null || data.last_signal === 99 ? "—" : `${data.last_signal}/31`;
+      $("#t-pos").innerHTML = data.last_lat ? `<a href="${mapsLink(data.last_lat, data.last_lon)}" target="_blank">ver no mapa</a>` : "aguardando GPS…";
+      $("#t-quando").textContent = ago(data.last_seen_at);
+      $("#teste-status").innerHTML = '<span class="status ok">Rastreador comunicando</span>';
+      show("#passo-pronto");
+      if (data.last_lat) return;
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+}
+</script>
+</body>
+</html>

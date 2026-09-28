@@ -1,0 +1,38 @@
+:root {
+  --bg: #fbf8f1; --card: #ffffff; --ink: #2b2417; --muted: #6f6453; --line: #e6dccb;
+  --mel: #d99a1e; --mel-dark: #a86f00; --ok: #2e7d32; --alerta: #c62828; --aviso: #b26a00;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17140f; --card: #221e17; --ink: #f3ecdf; --muted: #b3a792; --line: #3a3326;
+    --mel: #f0b43c; --mel-dark: #f0b43c; --ok: #66bb6a; --alerta: #ef5350; --aviso: #ffb74d;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { background: var(--mel); color: #221a08; padding: 14px 16px; font-weight: 700; font-size: 20px; }
+header small { display: block; font-weight: 400; font-size: 14px; }
+main { max-width: 640px; margin: 0 auto; padding: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 0 0 16px; }
+h1, h2 { line-height: 1.2; margin: 0 0 12px; }
+label { display: block; margin: 12px 0; font-weight: 600; }
+input, select { display: block; width: 100%; margin-top: 6px; padding: 12px; font-size: 17px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--bg); color: var(--ink); }
+button, .btn { display: block; width: 100%; padding: 14px; margin: 10px 0; border: 0; border-radius: 12px; font-size: 18px;
+  font-weight: 700; background: var(--mel); color: #221a08; cursor: pointer; text-align: center; text-decoration: none; }
+button.secundario, .btn.secundario { background: transparent; color: var(--ink); border: 2px solid var(--line); }
+button.perigo { background: var(--alerta); color: #fff; }
+button.ok { background: var(--ok); color: #fff; }
+button:disabled { opacity: .5; }
+.msg { color: var(--muted); }
+.erro { color: var(--alerta); font-weight: 600; }
+.status { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 14px; font-weight: 700; }
+.status.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.status.alerta { background: color-mix(in srgb, var(--alerta) 18%, transparent); color: var(--alerta); }
+.status.aviso { background: color-mix(in srgb, var(--aviso) 18%, transparent); color: var(--aviso); }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.grid div span { display: block; color: var(--muted); font-size: 14px; }
+#map { height: 320px; border-radius: 12px; margin: 12px 0; }
+.passos { color: var(--muted); font-size: 15px; }
+.passos b { color: var(--ink); }
+code { background: var(--bg); padding: 2px 6px; border-radius: 6px; }

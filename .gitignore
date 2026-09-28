@@ -1,0 +1,6 @@
+# Segredos e arquivos gerados
+firmware/include/config.h
+firmware/.pio/
+node_modules/
+.env
+*.local

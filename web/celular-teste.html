@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Celular como rastreador de teste</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>Colmeia Segura<small>Celular como rastreador de teste</small></header>
+<main>
+  <section class="card" id="config">
+    <h2>Configurar</h2>
+    <p class="passos">Use um rastreador de teste só para o celular (ex.: <code>CS-CELULAR</code>), criado com
+      <code>node tools/novo-rastreador.mjs CS-CELULAR</code> e ativado pelo QR Code como um rastreador normal.</p>
+    <form id="f-config">
+      <label>Código do rastreador<input name="id" required autocomplete="off" placeholder="CS-CELULAR"></label>
+      <label>Segredo do rastreador<input name="secret" required autocomplete="off"></label>
+      <button>Iniciar rastreador de teste</button>
+    </form>
+  </section>
+
+  <section class="card" id="painel" hidden>
+    <h2 id="p-titulo">Rastreador ativo</h2>
+    <p class="passos">Deixe esta página aberta e a tela ligada. Coloque o celular dentro da caixa e mexa nela para testar o alerta.</p>
+    <div class="grid">
+      <div><span>Estado</span><b id="p-estado">vigiando</b></div>
+      <div><span>Modo</span><b id="p-modo">normal</b></div>
+      <div><span>GPS</span><b id="p-gps">aguardando…</b></div>
+      <div><span>Última resposta</span><b id="p-resp">—</b></div>
+    </div>
+    <button class="secundario" id="b-mexer">Simular movimento agora</button>
+    <button class="secundario" id="b-parar">Parar</button>
+    <h2>Registro</h2>
+    <ol id="log" class="passos" reversed></ol>
+  </section>
+</main>
+
+<script type="module">
+import { $, show } from "./app.js";
+import { INGEST_URL } from "./config.js";
+
+const store = {
+  get: (k, d = "") => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* sem armazenamento */ } },
+};
+
+let deviceId = store.get("cs-id"), secret = store.get("cs-secret");
+$("#f-config").id.value = deviceId;
+$("#f-config").secret.value = secret;
+
+const state = { mode: "normal", alertOpen: false, pos: null, watchUntil: 0, timers: [], wakeLock: null };
+
+function log(msg) {
+  const li = document.createElement("li");
+  li.textContent = `${new Date().toLocaleTimeString("pt-BR")} — ${msg}`;
+  $("#log").prepend(li);
+}
+
+async function hmacHex(key, msg) {
+  const enc = new TextEncoder();
+  const k = await crypto.subtle.importKey("raw", enc.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", k, enc.encode(msg)));
+  return Array.from(sig, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function nextSeq() {
+  const seq = Math.max(Number(store.get(`cs-seq-${deviceId}`, "0")) + 1, Math.floor(Date.now() / 1000));
+  store.set(`cs-seq-${deviceId}`, String(seq));
+  return seq;
+}
+
+async function batteryMv() {
+  try { const b = await navigator.getBattery(); return Math.round(3300 + b.level * 900); } catch { return null; }
+}
+
+async function send(type) {
+  const ev = { seq: nextSeq(), t: type, ch: "teste", bat: await batteryMv(), sig: 99 };
+  if (state.pos) { ev.lat = state.pos.lat; ev.lon = state.pos.lon; }
+  const body = JSON.stringify({ events: [ev] });
+  try {
+    const res = await fetch(INGEST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-device-id": deviceId, "x-signature": await hmacHex(secret, body) },
+      body,
+    });
+    const cfg = await res.json();
+    if (!res.ok) { log(`${type}: recusado (${cfg.error || res.status})`); return; }
+    state.mode = cfg.mode;
+    state.alertOpen = !!cfg.al;
+    $("#p-modo").textContent = cfg.mode === "roubo" ? "ROUBO (posição a cada 1 min)" : "normal";
+    $("#p-resp").textContent = new Date().toLocaleTimeString("pt-BR");
+    log(`${type} enviado${cfg.al ? " — alerta aberto" : ""}`);
+  } catch (e) {
+    log(`${type}: sem internet (${e.message})`);
+  }
+}
+
+// ---- Detecção de movimento: mesma regra do firmware ----
+// Confirma se inclinar mais de 12° ou se houver agitação em 2 de 3 segundos.
+let ref = null, lastA = null, activeSeconds = [], currentSecondActive = false, lastSecond = 0, cooldownUntil = 0;
+const angle = (a, b) => {
+  const dot = a.x * b.x + a.y * b.y + a.z * b.z;
+  const n = Math.hypot(a.x, a.y, a.z) * Math.hypot(b.x, b.y, b.z);
+  return n ? Math.acos(Math.max(-1, Math.min(1, dot / n))) * 180 / Math.PI : 0;
+};
+
+function onMotion(e) {
+  const g = e.accelerationIncludingGravity;
+  if (!g || g.x == null) return;
+  const a = { x: g.x, y: g.y, z: g.z };
+  if (!ref) ref = a;
+  if (lastA && Math.hypot(a.x - lastA.x, a.y - lastA.y, a.z - lastA.z) > 2.0) currentSecondActive = true;
+  lastA = a;
+  const sec = Math.floor(Date.now() / 1000);
+  if (sec !== lastSecond) {
+    activeSeconds = [...activeSeconds.slice(-2), currentSecondActive];
+    currentSecondActive = false;
+    lastSecond = sec;
+    const confirmed = angle(a, ref) > 12 || activeSeconds.filter(Boolean).length >= 2;
+    if (confirmed && Date.now() > cooldownUntil) motionDetected();
+    else if (!activeSeconds.some(Boolean) && state.mode === "normal" && !state.alertOpen) ref = a;
+  }
+}
+
+async function motionDetected() {
+  cooldownUntil = Date.now() + 60_000;
+  $("#p-estado").textContent = "MOVIMENTO!";
+  if (navigator.vibrate) navigator.vibrate(300);
+  await send("movimento");
+  state.watchUntil = Date.now() + 15 * 60_000;
+}
+
+// A cada minuto: se há alerta aberto ou modo roubo, manda a posição.
+function tick() {
+  if (state.mode === "roubo" || (state.alertOpen && Date.now() < state.watchUntil)) {
+    send("posicao");
+  } else {
+    $("#p-estado").textContent = "vigiando";
+  }
+}
+
+async function start() {
+  deviceId = $("#f-config").id.value.trim().toUpperCase();
+  secret = $("#f-config").secret.value.trim();
+  store.set("cs-id", deviceId);
+  store.set("cs-secret", secret);
+
+  if (typeof DeviceMotionEvent !== "undefined" && DeviceMotionEvent.requestPermission) {
+    if (await DeviceMotionEvent.requestPermission() !== "granted") { alert("Permita o acesso ao movimento."); return; }
+  }
+  window.addEventListener("devicemotion", onMotion);
+  if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(
+      (p) => {
+        state.pos = { lat: p.coords.latitude, lon: p.coords.longitude };
+        $("#p-gps").textContent = `±${Math.round(p.coords.accuracy)} m`;
+      },
+      (e) => { $("#p-gps").textContent = "sem permissão"; log(`GPS: ${e.message}`); },
+      { enableHighAccuracy: true, maximumAge: 10000 },
+    );
+  }
+  try { state.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* sem wake lock */ }
+
+  show("#config", false);
+  show("#painel");
+  $("#p-titulo").textContent = `Rastreador ${deviceId}`;
+  send("online");
+  state.timers.push(setInterval(tick, 60_000));
+  state.timers.push(setInterval(() => send("vida"), 10 * 60_000));
+}
+
+$("#f-config").onsubmit = (ev) => { ev.preventDefault(); start(); };
+$("#b-mexer").onclick = () => motionDetected();
+$("#b-parar").onclick = () => location.reload();
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState === "visible" && state.timers.length) {
+    try { state.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* ignore */ }
+  }
+});
+</script>
+</body>
+</html>

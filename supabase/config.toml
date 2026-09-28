@@ -1,0 +1,7 @@
+# Configuração das funções para o Supabase CLI (supabase functions deploy).
+[functions.ingest]
+# O rastreador não tem login: ele se autentica pela assinatura HMAC.
+verify_jwt = false
+
+[functions.dispatch]
+verify_jwt = true

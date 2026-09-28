@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meus rastreadores</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+</head>
+<body>
+<header>Colmeia Segura<small>Meus rastreadores</small></header>
+<main>
+  <section class="card" id="login"><p class="msg">Carregando… (precisa de internet)</p></section>
+  <section id="lista" hidden></section>
+  <section class="card" id="mapa-card" hidden><h2>Mapa</h2><div id="map"></div></section>
+  <button class="secundario" id="sair" hidden>Sair</button>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module">
+import { $, show, sb, ensureLogin, ago, fmtDate, batteryPct, mapsLink, errorText, esc } from "./app.js";
+
+let map, layer;
+
+function statusDe(d, alertas) {
+  const aberto = alertas.find((a) => a.device_id === d.id && ["pendente", "escalado", "roubo_confirmado"].includes(a.status));
+  if (d.mode === "roubo") return ['alerta', "RASTREAMENTO INTENSIVO"];
+  if (aberto?.kind === "movimento") return ["alerta", "movimento — aguardando resposta"];
+  if (aberto?.kind === "offline") return ["aviso", "sem comunicação"];
+  if (d.maintenance_until && new Date(d.maintenance_until) > new Date()) return ["aviso", `manutenção até ${fmtDate(d.maintenance_until)}`];
+  return ["ok", "protegida"];
+}
+
+async function carregar() {
+  const [{ data: devs, error }, { data: alertas }, { data: apiarios }] = await Promise.all([
+    sb.from("devices").select("*").order("id"),
+    sb.from("alerts").select("device_id,kind,status,opened_at").order("opened_at", { ascending: false }).limit(200),
+    sb.from("apiaries").select("id,name"),
+  ]);
+  if (error) { $("#lista").innerHTML = `<p class="erro card">${esc(errorText(error))}</p>`; return; }
+  const nomeApiario = Object.fromEntries((apiarios || []).map((a) => [a.id, a.name]));
+  show("#lista");
+  if (!devs.length) {
+    $("#lista").innerHTML = '<p class="card">Nenhum rastreador ativado. Escaneie o QR Code do rastreador para ativar.</p>';
+    return;
+  }
+  $("#lista").innerHTML = devs.map((d) => {
+    const [cls, txt] = statusDe(d, alertas || []);
+    const pct = batteryPct(d.last_battery_mv);
+    return `<article class="card">
+      <h2>${esc(d.hive_label || d.id)} <span class="status ${cls}">${esc(txt)}</span></h2>
+      <div class="grid">
+        <div><span>Apiário</span><b>${esc(nomeApiario[d.apiary_id] || "—")}</b></div>
+        <div><span>Rastreador</span><b>${esc(d.id)}</b></div>
+        <div><span>Última mensagem</span><b>${ago(d.last_seen_at)}</b></div>
+        <div><span>Bateria</span><b>${pct === null ? "—" : pct + "%"}</b></div>
+      </div>
+      ${d.last_lat ? `<a class="btn secundario" target="_blank" href="${mapsLink(d.last_lat, d.last_lon)}">Ver no Google Maps</a>` : ""}
+      <button class="secundario" data-mnt="${esc(d.id)}">Vou mexer nas caixas (manutenção 2 h)</button>
+      ${d.mode === "roubo" ? `<button class="ok" data-fim="${esc(d.id)}">Caixa recuperada / falso alarme</button>` : ""}
+    </article>`;
+  }).join("");
+
+  document.querySelectorAll("[data-mnt]").forEach((b) => b.onclick = async () => {
+    const { error } = await sb.rpc("set_maintenance", { p_device_id: b.dataset.mnt, p_minutes: 120 });
+    if (error) alert(errorText(error)); else carregar();
+  });
+  document.querySelectorAll("[data-fim]").forEach((b) => b.onclick = async () => {
+    if (!confirm("Encerrar o rastreamento intensivo desta caixa?")) return;
+    const { error } = await sb.rpc("end_theft_mode", { p_device_id: b.dataset.fim });
+    if (error) alert(errorText(error)); else carregar();
+  });
+
+  const pts = devs.filter((d) => d.last_lat);
+  if (pts.length && window.L) {
+    show("#mapa-card");
+    if (!map) {
+      map = L.map("map");
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+    }
+    if (layer) layer.remove();
+    layer = L.featureGroup(pts.map((d) => L.marker([d.last_lat, d.last_lon]).bindPopup(esc(d.hive_label || d.id)))).addTo(map);
+    map.fitBounds(layer.getBounds(), { maxZoom: 16, padding: [30, 30] });
+  }
+}
+
+ensureLogin($("#login"), () => {
+  show("#login", false);
+  show("#sair");
+  carregar();
+  setInterval(carregar, 30000);
+});
+$("#sair").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+</script>
+</body>
+</html>
