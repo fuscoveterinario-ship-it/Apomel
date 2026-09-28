@@ -63,7 +63,7 @@ export function smsRequest(n: Notification, env: Env): Request | null {
       method: "POST",
       headers: { "X-API-TOKEN": token, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: env("ZENVIA_FROM") ?? "colmeiasegura",
+        from: env("ZENVIA_FROM") ?? "beeguard",
         to: digits(n.to_phone),
         contents: [{ type: "text", text }],
       }),

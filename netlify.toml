@@ -1,0 +1,10 @@
+# Publicação do site (pasta web/) no Netlify, ligado ao repositório privado no GitHub.
+[build]
+  publish = "web"
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"

@@ -1,4 +1,4 @@
-# Colmeia Segura
+# Bee Guard
 
 Rastreador antifurto de colmeias com plataforma própria: o apicultor escaneia o QR Code,
 cadastra a caixa e os telefones, testa a comunicação e leva a caixa ao apiário. Se a caixa

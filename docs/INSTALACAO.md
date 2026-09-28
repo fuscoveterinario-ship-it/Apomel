@@ -1,11 +1,11 @@
-# Guia de instalação — Colmeia Segura
+# Guia de instalação — Bee Guard
 
 ## Instalação atual (já feita)
 
-O Colmeia Segura está instalado **dentro do projeto Supabase "Rastreia Moura"**
+O Bee Guard está instalado **dentro do projeto Supabase "Rastreia Moura"**
 (`vmzmthtsxiwwjtpupclv`, região São Paulo), **separado** dos outros sistemas:
 
-- tudo o que é do Colmeia tem o prefixo `colmeia_` (tabelas, funções, agendamentos);
+- tudo o que é do Bee Guard tem o prefixo interno `colmeia_` (nome técnico, não aparece para o apicultor) (tabelas, funções, agendamentos);
 - funções do servidor: `colmeia-ingest` (recebe os rastreadores) e `colmeia-dispatch` (envia WhatsApp/SMS);
 - agendamentos (pg_cron): `colmeia-escalonamento` e `colmeia-envio`, a cada minuto;
 - nenhuma tabela, função ou permissão dos outros sistemas (mel_, lat_, aprotunas_…) foi alterada.
@@ -14,7 +14,7 @@ O login usa os mesmos usuários do projeto. **Não altere o "Site URL" nem os mo
 do Authentication (os outros sistemas usam): apenas **adicione** o endereço do site do Colmeia em
 *Authentication → URL Configuration → Redirect URLs*. O login funciona clicando no link do e-mail.
 
-Falta: publicar o site (passo 5), trocar `https://colmeiasegura.example` pelo endereço real
+Falta: publicar o site (passo 5), trocar `https://beeguard.example` pelo endereço real
 (passo 1.3) e contratar WhatsApp/SMS (passo 4). Até lá as mensagens ficam como "simulado".
 
 ---
@@ -73,9 +73,9 @@ parâmetros **na ordem indicada**:
 
 | Modelo | Parâmetros | Texto sugerido |
 |---|---|---|
-| `alerta_movimento` | caixa, apiário, link | ALERTA COLMEIA SEGURA: a {{1}} foi movimentada no {{2}}. Foi você fazendo manutenção? Responda em até 5 minutos: {{3}} |
-| `alerta_escalado` | caixa, apiário, link | ALERTA COLMEIA SEGURA: a {{1}} ({{2}}) foi movimentada e ninguém confirmou em 5 minutos. POSSÍVEL ROUBO. Mapa: {{3}} |
-| `roubo_confirmado` | caixa, apiário, link | ALERTA COLMEIA SEGURA: ROUBO CONFIRMADO da {{1}} ({{2}}). Mapa: {{3}} |
+| `alerta_movimento` | caixa, apiário, link | ALERTA BEE GUARD: a {{1}} foi movimentada no {{2}}. Foi você fazendo manutenção? Responda em até 5 minutos: {{3}} |
+| `alerta_escalado` | caixa, apiário, link | ALERTA BEE GUARD: a {{1}} ({{2}}) foi movimentada e ninguém confirmou em 5 minutos. POSSÍVEL ROUBO. Mapa: {{3}} |
+| `roubo_confirmado` | caixa, apiário, link | ALERTA BEE GUARD: ROUBO CONFIRMADO da {{1}} ({{2}}). Mapa: {{3}} |
 | `offline` | caixa, apiário, hora, link | AVISO: o rastreador da {{1}} ({{2}}) está sem comunicação desde {{3}}. Verifique: {{4}} |
 | `bateria_baixa` | caixa, apiário, link | AVISO: bateria baixa no rastreador da {{1}} ({{2}}). Recarregue: {{3}} |
 
@@ -93,10 +93,16 @@ $$);
 
 ## 5. Publicar o site
 
-1. Edite `web/config.js` com o endereço do projeto e a chave **anon**
-   (Supabase → *Project Settings → API*).
-2. Publique a pasta `web/` em qualquer hospedagem de site estático **com HTTPS**
-   (GitHub Pages, Netlify, Cloudflare Pages…).
+O repositório `bee-guard` é privado, então o site é publicado pelo **Netlify** (grátis),
+que lê o repositório privado:
+
+1. Crie uma conta em <https://app.netlify.com> entrando com o GitHub.
+2. *Add new site → Import an existing project → GitHub* → escolha `bee-guard`.
+3. Não precisa mudar nada: o arquivo `netlify.toml` já diz para publicar a pasta `web/`.
+4. Anote o endereço gerado (ex.: `https://bee-guard.netlify.app`) e use nos passos 1.3 e 2.
+
+(Alternativa equivalente: Cloudflare Pages, com *Build output directory* = `web`.)
+O `web/config.js` já aponta para o projeto Supabase.
 
 ## 6. Cadastrar um rastreador
 

@@ -1,4 +1,4 @@
-// Colmeia Segura — firmware do rastreador de colmeias
+// Bee Guard — firmware do rastreador de colmeias
 // Placa LILYGO T-A7670SA (ESP32 + modem 4G/2G com GPS) + acelerômetro ADXL345.
 //
 // Funcionamento:
@@ -346,7 +346,7 @@ bool sendQueue() {
 void sendSmsAlert() {
   String list = prefs.getString("sms", "");
   if (list.isEmpty() || !modemOn()) return;
-  String text = "ALERTA COLMEIA SEGURA: rastreador " DEVICE_ID " detectou movimento. Sem internet no local.";
+  String text = "ALERTA BEE GUARD: rastreador " DEVICE_ID " detectou movimento. Sem internet no local.";
   if (st.hasFix) {
     char pos[80];
     snprintf(pos, sizeof(pos), " Ultima posicao: https://maps.google.com/?q=%.6f,%.6f", st.lastLat, st.lastLon);
@@ -490,7 +490,7 @@ void setup() {
     st.heartbeatMin = DEFAULT_HEARTBEAT_MIN;
     st.theftIntervalS = DEFAULT_THEFT_INTERVAL_S;
   }
-  trace("Colmeia Segura %s | %s | acordou por %d | bateria %d mV", FW_VERSION, DEVICE_ID, cause, batteryMv());
+  trace("Bee Guard %s | %s | acordou por %d | bateria %d mV", FW_VERSION, DEVICE_ID, cause, batteryMv());
 
   // 1) Acordou por movimento
   if (cause == ESP_SLEEP_WAKEUP_EXT0 && !st.theftMode) {

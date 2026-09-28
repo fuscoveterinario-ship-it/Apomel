@@ -1,4 +1,4 @@
--- Colmeia Segura — esquema principal
+-- Bee Guard — esquema principal
 -- Rastreadores de colmeias com alerta de movimento, escalonamento e modo roubo.
 
 create extension if not exists pgcrypto with schema extensions;
@@ -107,7 +107,7 @@ create table public.colmeia_settings (
   value  text not null
 );
 insert into public.colmeia_settings (key, value) values
-  ('site_url', 'https://colmeiasegura.example'),
+  ('site_url', 'https://beeguard.example'),
   ('escalation_minutes', '5'),
   ('low_battery_mv', '3450');
 

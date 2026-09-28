@@ -1,4 +1,4 @@
-// Projeto Supabase do Colmeia Segura (instalado dentro do projeto "Rastreia Moura",
+// Projeto Supabase do Bee Guard (instalado dentro do projeto "Rastreia Moura",
 // com tudo separado pelo prefixo colmeia_). A chave "anon" é pública por natureza:
 // a segurança vem das regras do banco (RLS) e das funções.
 export const SUPABASE_URL = "https://vmzmthtsxiwwjtpupclv.supabase.co";

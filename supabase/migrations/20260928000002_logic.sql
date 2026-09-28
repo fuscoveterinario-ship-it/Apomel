@@ -1,4 +1,4 @@
--- Colmeia Segura — regras de negócio
+-- Bee Guard — regras de negócio
 -- Recebimento de eventos, abertura de alertas, escalonamento em 5 minutos,
 -- resposta do apicultor pelo link e ativação por QR Code.
 
@@ -23,16 +23,16 @@ declare
 begin
   return case p_template
     when 'alerta_movimento' then
-      format('ALERTA COLMEIA SEGURA: a %s foi movimentada no %s. Foi você fazendo manutenção? Responda em até 5 minutos: %s', caixa, apiario, link)
+      format('ALERTA BEE GUARD: a %s foi movimentada no %s. Foi você fazendo manutenção? Responda em até 5 minutos: %s', caixa, apiario, link)
     when 'alerta_escalado' then
-      format('ALERTA COLMEIA SEGURA: a %s (%s) foi movimentada e ninguém confirmou em 5 minutos. POSSÍVEL ROUBO. Rastreamento intensivo ativado. Mapa: %s', caixa, apiario, link)
+      format('ALERTA BEE GUARD: a %s (%s) foi movimentada e ninguém confirmou em 5 minutos. POSSÍVEL ROUBO. Rastreamento intensivo ativado. Mapa: %s', caixa, apiario, link)
     when 'roubo_confirmado' then
-      format('ALERTA COLMEIA SEGURA: ROUBO CONFIRMADO da %s (%s). Rastreamento intensivo ativado. Mapa: %s', caixa, apiario, link)
+      format('ALERTA BEE GUARD: ROUBO CONFIRMADO da %s (%s). Rastreamento intensivo ativado. Mapa: %s', caixa, apiario, link)
     when 'offline' then
-      format('AVISO COLMEIA SEGURA: o rastreador da %s (%s) está sem comunicação desde %s. Verifique: %s', caixa, apiario, hora, link)
+      format('AVISO BEE GUARD: o rastreador da %s (%s) está sem comunicação desde %s. Verifique: %s', caixa, apiario, hora, link)
     when 'bateria_baixa' then
-      format('AVISO COLMEIA SEGURA: bateria baixa no rastreador da %s (%s). Recarregue em breve: %s', caixa, apiario, link)
-    else format('COLMEIA SEGURA: aviso sobre a %s (%s): %s', caixa, apiario, link)
+      format('AVISO BEE GUARD: bateria baixa no rastreador da %s (%s). Recarregue em breve: %s', caixa, apiario, link)
+    else format('BEE GUARD: aviso sobre a %s (%s): %s', caixa, apiario, link)
   end;
 end $$;
 
@@ -349,7 +349,7 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- Permissões das funções
 -- ---------------------------------------------------------------------------
--- Só as funções do Colmeia Segura (o projeto pode ter funções de outros sistemas).
+-- Só as funções do Bee Guard (o projeto pode ter funções de outros sistemas).
 revoke execute on function
   public.colmeia_setting(text),
   public.colmeia_render_message(text, jsonb),
