@@ -1,5 +1,6 @@
 // Bee Guard — firmware do rastreador de colmeias
-// Placa LILYGO T-A7670SA (ESP32 + modem 4G/2G com GPS) + acelerômetro ADXL345.
+// Placas: LILYGO T-A7670SA (4G Cat-1 + 2G, produção) ou T-SIM7080G-S3 (Cat-M/NB-IoT,
+// protótipo de baixo consumo) + acelerômetro ADXL345. Escolha no platformio.ini.
 //
 // Funcionamento:
 //  - Dorme em sono profundo quase o tempo todo (economia de bateria).
@@ -33,6 +34,13 @@
 #include "config.h"
 #include "adxl345.h"
 
+#ifdef HAS_PMU
+#define XPOWERS_CHIP_AXP2101
+#include <XPowersLib.h>
+XPowersPMU PMU;
+bool pmuOk = false;
+#endif
+
 #define SerialAT Serial1
 #include <TinyGsmClient.h>
 #ifdef DUMP_AT_COMMANDS
@@ -43,7 +51,7 @@ TinyGsm modem(debugger);
 TinyGsm modem(SerialAT);
 #endif
 
-#define FW_VERSION "0.2.0"
+#define FW_VERSION "0.3.0"
 
 #ifndef DEFAULT_THEFT_SMS_INTERVAL_S
 #define DEFAULT_THEFT_SMS_INTERVAL_S 300
@@ -112,9 +120,13 @@ void trace(const char* fmt, ...) {
 // Bateria, sequência e fila de eventos
 // ---------------------------------------------------------------------------
 int batteryMv() {
+#ifdef HAS_PMU
+  return pmuOk ? (int)PMU.getBattVoltage() : 0;
+#else
   uint32_t sum = 0;
   for (int i = 0; i < 8; i++) sum += analogReadMilliVolts(BOARD_BAT_ADC_PIN);
   return (int)(sum / 8) * 2;  // divisor resistivo 1:2 na placa
+#endif
 }
 
 // Número sempre crescente, guardado na memória flash (não se perde sem bateria).
@@ -147,10 +159,56 @@ void enqueue(const char* type, bool withPosition) {
 // ---------------------------------------------------------------------------
 // Modem: ligar, rede, desligar
 // ---------------------------------------------------------------------------
+// Liga a placa logo ao acordar (alimentação e chip de energia).
+void boardInit(bool coldBoot) {
+#ifdef HAS_PMU
+  pmuOk = PMU.begin(Wire, AXP2101_SLAVE_ADDRESS, PMU_SDA_PIN, PMU_SCL_PIN);
+  if (!pmuOk) {
+    trace("chip de energia (AXP2101) não respondeu");
+    return;
+  }
+  if (coldBoot) {
+    PMU.disableDC3();  // garante que o modem começa desligado
+    delay(200);
+  }
+  PMU.disableTSPinMeasure();
+  PMU.enableBattVoltageMeasure();
+#else
+  // Necessário na T-A7670 com bateria: sem isso a placa reinicia.
+  pinMode(BOARD_POWERON_PIN, OUTPUT);
+  digitalWrite(BOARD_POWERON_PIN, HIGH);
+  gpio_hold_dis((gpio_num_t)MODEM_RESET_PIN);
+#endif
+}
+
+void pulseModemPower() {
+#ifdef HAS_PMU
+  pinMode(BOARD_MODEM_PWR_PIN, OUTPUT);
+  digitalWrite(BOARD_MODEM_PWR_PIN, LOW);
+  delay(100);
+  digitalWrite(BOARD_MODEM_PWR_PIN, HIGH);
+  delay(1000);
+  digitalWrite(BOARD_MODEM_PWR_PIN, LOW);
+#else
+  pinMode(BOARD_PWRKEY_PIN, OUTPUT);
+  digitalWrite(BOARD_PWRKEY_PIN, LOW);
+  delay(100);
+  digitalWrite(BOARD_PWRKEY_PIN, HIGH);
+  delay(MODEM_POWERON_PULSE_WIDTH_MS);
+  digitalWrite(BOARD_PWRKEY_PIN, LOW);
+#endif
+}
+
 bool modemOn() {
   if (modemReady) return true;
   SerialAT.begin(MODEM_BAUDRATE, SERIAL_8N1, MODEM_RX_PIN, MODEM_TX_PIN);
 
+#ifdef HAS_PMU
+  if (!pmuOk) return false;
+  PMU.setDC3Voltage(3000);  // alimentação principal do SIM7080G
+  PMU.enableDC3();
+  delay(100);
+#else
   digitalWrite(BOARD_POWERON_PIN, HIGH);
   pinMode(MODEM_RESET_PIN, OUTPUT);
   digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
@@ -158,25 +216,30 @@ bool modemOn() {
   digitalWrite(MODEM_RESET_PIN, MODEM_RESET_LEVEL);
   delay(2600);
   digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
+#endif
 
   pinMode(MODEM_DTR_PIN, OUTPUT);
   digitalWrite(MODEM_DTR_PIN, LOW);  // modem acordado
-
-  pinMode(BOARD_PWRKEY_PIN, OUTPUT);
-  digitalWrite(BOARD_PWRKEY_PIN, LOW);
-  delay(100);
-  digitalWrite(BOARD_PWRKEY_PIN, HIGH);
-  delay(MODEM_POWERON_PULSE_WIDTH_MS);
-  digitalWrite(BOARD_PWRKEY_PIN, LOW);
+  pulseModemPower();
 
   trace("ligando modem...");
   uint32_t start = millis();
+  uint32_t lastPulse = millis();
   while (!modem.testAT(1000)) {
     if (millis() - start > 30000) {
       trace("modem não respondeu");
       return false;
     }
+    if (millis() - lastPulse > 15000) {  // não ligou: tenta o botão de novo
+      pulseModemPower();
+      lastPulse = millis();
+    }
   }
+#ifdef TINY_GSM_MODEM_SIM7080
+  // Só LTE, preferindo Cat-M e usando NB-IoT como reserva.
+  modem.setNetworkMode(MODEM_NETWORK_LTE);
+  modem.setPreferredMode(MODEM_PREFERRED_CATM_NBIOT);
+#endif
   modemReady = true;
   return true;
 }
@@ -211,6 +274,15 @@ bool networkUp(uint32_t timeoutMs) {
     return false;
   }
   trace("rede OK, sinal %d", signalQuality);
+  {
+    // Mostra qual rede foi encontrada (útil no teste de cada apiário): ex. "LTE CAT-M1" ou "LTE NB-IOT".
+    String info;
+    modem.sendAT("+CPSI?");
+    if (modem.waitResponse(3000UL, info) == 1) {
+      info.trim();
+      trace("rede encontrada: %s", info.c_str());
+    }
+  }
 
   for (int i = 0; i < 3; i++) {
     if (modem.setNetworkActive(NETWORK_APN)) {
@@ -230,19 +302,39 @@ void modemOffAndHold() {
     delay(3000);
   }
   modemReady = netReady = gpsOn = false;
+#ifdef HAS_PMU
+  if (pmuOk) {
+    PMU.disableDC3();    // corta a alimentação do modem
+    PMU.disableBLDO2();  // e da antena do GPS
+  }
+#else
   digitalWrite(BOARD_POWERON_PIN, LOW);
   // O pino de reset precisa ficar baixo durante o sono, senão o modem liga sozinho.
   pinMode(MODEM_RESET_PIN, OUTPUT);
   digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
   gpio_hold_en((gpio_num_t)MODEM_RESET_PIN);
   gpio_deep_sleep_hold_en();
+#endif
 }
 
 // ---------------------------------------------------------------------------
 // GPS
 // ---------------------------------------------------------------------------
-bool getFix(uint32_t timeoutS) {
+bool readFix(uint32_t timeoutS) {
   if (!modemOn()) return false;
+#ifdef GNSS_EXCLUSIVE
+  // No SIM7080G o GPS e os dados usam o mesmo rádio: desliga os dados antes.
+  if (netReady) {
+    modem.setNetworkDeactivate();
+    netReady = false;
+  }
+#endif
+#ifdef HAS_PMU
+  if (pmuOk) {
+    PMU.setBLDO2Voltage(3300);  // alimentação da antena do GPS
+    PMU.enableBLDO2();
+  }
+#endif
   if (!gpsOn) {
     gpsOn = modem.enableGPS(MODEM_GPS_ENABLE_GPIO, MODEM_GPS_ENABLE_LEVEL);
     if (!gpsOn) {
@@ -267,6 +359,21 @@ bool getFix(uint32_t timeoutS) {
   }
   trace("GPS sem posição em %us", timeoutS);
   return false;
+}
+
+// Pega a posição. No SIM7080G desliga o GPS no fim para liberar o rádio para os dados.
+bool getFix(uint32_t timeoutS) {
+  bool ok = readFix(timeoutS);
+#ifdef GNSS_EXCLUSIVE
+  if (gpsOn) {
+    modem.disableGPS(MODEM_GPS_ENABLE_GPIO, !MODEM_GPS_ENABLE_LEVEL);
+    gpsOn = false;
+  }
+#ifdef HAS_PMU
+  if (pmuOk) PMU.disableBLDO2();
+#endif
+#endif
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +450,7 @@ bool sendQueue() {
     lastNetFailMs = millis() | 1;
     return false;
   }
+  lastNetFailMs = 0;  // internet voltou
 
   String body = buildBody();
   String sig = hmacHex(body);
@@ -572,10 +680,7 @@ void finishAndSleep() {
 // ---------------------------------------------------------------------------
 void setup() {
   Serial.begin(115200);
-  // Necessário na T-A7670 com bateria: sem isso a placa reinicia.
-  pinMode(BOARD_POWERON_PIN, OUTPUT);
-  digitalWrite(BOARD_POWERON_PIN, HIGH);
-  gpio_hold_dis((gpio_num_t)MODEM_RESET_PIN);
+  boardInit(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED);
 
   esp_wifi_stop();
   esp_bt_controller_disable();
@@ -583,7 +688,10 @@ void setup() {
   prefs.begin("colmeia", false);
   Wire.begin(ACCEL_SDA_PIN, ACCEL_SCL_PIN);
   accelOk = accel.begin(Wire);
-  if (!accelOk) trace("ADXL345 não encontrado: confira os fios (SDA=21, SCL=22, CS e VCC no 3V3, SDO no GND)");
+  if (!accelOk) {
+    trace("ADXL345 não encontrado: confira os fios (SDA=%d, SCL=%d, INT=%d, CS e VCC no 3V3, SDO no GND)",
+          ACCEL_SDA_PIN, ACCEL_SCL_PIN, ACCEL_INT_PIN);
+  }
 
   esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
   bool firstBoot = st.magic != STATE_MAGIC;
@@ -596,7 +704,8 @@ void setup() {
   }
   // Roubo local sem nenhum contato com a plataforma há mais de 1 dia: encerra.
   if (st.localTheft && now_s() - st.localTheftSince > 24 * 3600) st.localTheft = false;
-  trace("Bee Guard %s | %s | acordou por %d | bateria %d mV", FW_VERSION, DEVICE_ID, cause, batteryMv());
+  trace("Bee Guard %s | %s | %s | acordou por %d | bateria %d mV", FW_VERSION, BOARD_NAME, DEVICE_ID, cause,
+        batteryMv());
 
   // 1) Acordou por movimento
   if (cause == ESP_SLEEP_WAKEUP_EXT0 && !inTheft()) {

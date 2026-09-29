@@ -135,7 +135,8 @@ Ele usa o sensor de movimento e o GPS do próprio celular e segue as mesmas regr
 1. Instale o **VS Code** e a extensão **PlatformIO**.
 2. Abra a pasta `firmware/`.
 3. Copie `include/config.example.h` para `include/config.h` e preencha (passo 6 e APN do chip).
-4. Ligue a placa no USB e clique em **Upload** (seta →) na barra do PlatformIO.
+4. Escolha a placa na barra do PlatformIO: **t-sim7080g-s3** (protótipo, Cat-M/NB-IoT) ou
+   **t-a7670** (produção, 4G + 2G). Ligue a placa no USB e clique em **Upload** (seta →).
 5. Abra o **Serial Monitor** (tomada) para ver as mensagens da placa.
 
 Primeiro teste de bancada (tudo em cima da mesa, com o chip e as antenas):
@@ -144,4 +145,5 @@ Primeiro teste de bancada (tudo em cima da mesa, com o chip e as antenas):
 - faça a ativação pelo QR Code e confira o **teste de comunicação** na tela;
 - incline a placa: deve aparecer `movimento` e chegar a mensagem de alerta.
 
-Ligação do acelerômetro: `docs/ligacao-lilygo.png`.
+Ligação do acelerômetro: `docs/ligacao-lilygo.png` (T-A7670SA) e `docs/ligacao-sim7080.png` (T-SIM7080G-S3).
+O monitor mostra `rede encontrada: ...` com o tipo de rede (ex.: LTE CAT-M1 ou LTE NB-IOT): use isso no teste de cada apiário.

@@ -31,6 +31,7 @@ class String {
   bool operator!=(const String& o) const { return s != o.s; }
   int indexOf(char c, unsigned from = 0) const { auto p = s.find(c, from); return p == std::string::npos ? -1 : (int)p; }
   String substring(unsigned a, unsigned b) const { return String(s.substr(a, b - a)); }
+  void trim() {}
 };
 struct HardwareSerial {
   void begin(unsigned long, int = 0, int = 0, int = 0) {}
