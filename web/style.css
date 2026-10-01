@@ -48,3 +48,7 @@ code { background: var(--bg); padding: 2px 6px; border-radius: 6px; }
 .peso-graf polyline { fill: none; stroke: var(--mel); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .peso-eixo { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
 .aviso-txt { color: var(--aviso); font-weight: 600; }
+[hidden] { display: none !important; }
+.aviso-email { background: color-mix(in srgb, var(--mel) 14%, transparent); border-left: 4px solid var(--mel); border-radius: 8px; padding: 4px 14px; margin-top: 12px; }
+.aviso-email ol { padding-left: 20px; }
+.aviso-email li { margin: 6px 0; }

@@ -61,26 +61,26 @@ export async function ensureLogin(container, onReadyOnce) {
   if (data.session) return onReady(data.session);
   container.innerHTML = `
     <h2>Entrar</h2>
-    <p>Digite seu e-mail. Enviaremos um código de acesso.</p>
+    <p>Digite seu e-mail. Enviaremos um link de acesso, sem senha.</p>
     <form id="f-email"><label>E-mail<input type="email" name="email" required autocomplete="email"></label>
-      <button>Receber código</button></form>
-    <form id="f-code" hidden><label>Código recebido<input name="code" inputmode="numeric" required
-      autocomplete="one-time-code"></label><button>Entrar</button></form>
+      <button>Receber link de acesso</button></form>
+    <div id="enviado" class="aviso-email" hidden>
+      <p><b>Pronto! Agora abra o seu e-mail.</b></p>
+      <ol>
+        <li>Procure a mensagem de <b>Supabase Auth</b> com o assunto <b>“Your sign-in link”</b>
+          (é o nosso sistema de acesso; o texto vem em inglês).</li>
+        <li>Toque em <b>“Sign in”</b>. Você volta para esta página já conectado.</li>
+        <li>Não chegou? Confira a caixa de <b>spam</b> ou <b>promoções</b>. O link vale por pouco tempo
+          e funciona uma vez só.</li>
+      </ol>
+    </div>
     <p class="msg" id="login-msg"></p>`;
-  let email = "";
   container.querySelector("#f-email").onsubmit = async (ev) => {
     ev.preventDefault();
-    email = ev.target.email.value.trim();
+    const email = ev.target.email.value.trim();
     const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href } });
-    container.querySelector("#login-msg").textContent = error ? errorText(error)
-      : "Código enviado. Confira seu e-mail (também serve clicar no link).";
-    if (!error) show(container.querySelector("#f-code"));
-  };
-  container.querySelector("#f-code").onsubmit = async (ev) => {
-    ev.preventDefault();
-    const { data: d, error } = await sb.auth.verifyOtp({ email, token: ev.target.code.value.trim(), type: "email" });
-    if (error) container.querySelector("#login-msg").textContent = errorText(error);
-    else onReady(d.session);
+    container.querySelector("#login-msg").textContent = error ? errorText(error) : "";
+    if (!error) show(container.querySelector("#enviado"));
   };
   sb.auth.onAuthStateChange((_e, session) => { if (session) onReady(session); });
 }
