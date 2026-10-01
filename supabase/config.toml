@@ -5,3 +5,7 @@ verify_jwt = false
 
 [functions.colmeia-dispatch]
 verify_jwt = true
+
+[functions.colmeia-login]
+# Chamada pelo site com a chave pública (anon), antes do login.
+verify_jwt = true

@@ -210,3 +210,19 @@ No `firmware/include/config.h` desta caixa: `#define SCALE_ENABLED 1`.
 
 Proteja o HX711 e as células da chuva. Calor e frio mudam um pouco a leitura (algumas centenas
 de gramas): por isso os avisos usam duas pesagens seguidas.
+
+## 10. E-mail de acesso do Bee Guard (código de 6 números)
+
+O login usa a função `colmeia-login`, que manda um e-mail **do Bee Guard**, em português, com
+um código de 6 números (pelo serviço **Resend**). Os modelos de e-mail do Supabase, usados
+pelos outros sistemas do projeto, não são alterados. Enquanto o Resend não estiver
+configurado, o site usa o e-mail padrão do Supabase (link "Sign in").
+
+1. Crie a conta em <https://resend.com> e adicione o domínio `beeguard.com.br`.
+2. Copie os registros DNS que o Resend mostrar para o **Netlify** (o DNS do domínio está lá):
+   *Domain management → beeguard.com.br → DNS settings → Add new record*. Clique em *Verify* no Resend.
+3. No Resend, crie uma *API key* (permissão *Sending access*).
+4. No Supabase: *Edge Functions → Secrets* → `RESEND_API_KEY` = a chave.
+   Opcional: `LOGIN_EMAIL_FROM` (padrão `Bee Guard <acesso@beeguard.com.br>`).
+
+Limites: 3 códigos por e-mail a cada 15 minutos e 200 por hora no total.

@@ -62,9 +62,16 @@ export async function ensureLogin(container, onReadyOnce) {
   if (data.session) return onReady(data.session);
   container.innerHTML = `
     <h2>Entrar</h2>
-    <p>Digite seu e-mail. Enviaremos um link de acesso, sem senha.</p>
-    <form id="f-email"><label>E-mail<input type="email" name="email" required autocomplete="email"></label>
-      <button>Receber link de acesso</button></form>
+    <p>Digite seu e-mail. Enviaremos um código de acesso, sem senha.</p>
+    <form id="f-email"><label>E-mail<input type="email" id="login-email" name="email" required autocomplete="email"></label>
+      <button>Receber código</button></form>
+    <form id="f-code" hidden>
+      <p class="aviso-email">Enviamos um e-mail de <b>Bee Guard</b> com um código de 6 números.
+        Não chegou em 1 minuto? Confira o <b>spam</b> ou <b>promoções</b>.</p>
+      <label>Código recebido<input id="login-code" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="10"
+        required autocomplete="one-time-code"></label>
+      <button>Entrar</button>
+      <button type="button" class="secundario" id="outro-email">Usar outro e-mail</button></form>
     <div id="enviado" class="aviso-email" hidden>
       <p><b>Pronto! Agora abra o seu e-mail.</b></p>
       <ol>
@@ -76,13 +83,43 @@ export async function ensureLogin(container, onReadyOnce) {
       </ol>
     </div>
     <p class="msg" id="login-msg"></p>`;
-  container.querySelector("#f-email").onsubmit = async (ev) => {
+  const msg = (t) => { container.querySelector("#login-msg").textContent = t; };
+  const fEmail = container.querySelector("#f-email");
+  const fCode = container.querySelector("#f-code");
+  let email = "";
+  fEmail.onsubmit = async (ev) => {
     ev.preventDefault();
-    const email = ev.target.email.value.trim();
-    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href } });
-    container.querySelector("#login-msg").textContent = error ? errorText(error) : "";
-    if (!error) show(container.querySelector("#enviado"));
+    email = ev.target.email.value.trim();
+    const btn = fEmail.querySelector("button");
+    btn.disabled = true;
+    msg("Enviando…");
+    // Código enviado pelo próprio Bee Guard; sem o serviço de e-mail configurado, usa o link padrão.
+    const { data: r, error } = await sb.functions.invoke("colmeia-login", { body: { email } });
+    btn.disabled = false;
+    if (!error && r?.ok) {
+      msg("");
+      show(fEmail, false);
+      show(fCode);
+      fCode.querySelector("input").focus();
+      return;
+    }
+    if (error && !r?.fallback) {
+      let text = "Não foi possível enviar o código. Tente de novo.";
+      try { text = (await error.context.json()).error || text; } catch { /* sem detalhe */ }
+      if (!(error.context && error.context.status === 404)) return msg(text);
+    }
+    const { error: e2 } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href } });
+    msg(e2 ? errorText(e2) : "");
+    if (!e2) show(container.querySelector("#enviado"));
   };
+  fCode.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const token = ev.target.code.value.replace(/\D/g, "");
+    const { data: d, error } = await sb.auth.verifyOtp({ email, token, type: "email" });
+    if (error) msg(/expired|invalid/i.test(error.message) ? "Código errado ou vencido. Confira o número ou peça um novo." : errorText(error));
+    else onReady(d.session);
+  };
+  container.querySelector("#outro-email").onclick = () => { show(fCode, false); show(fEmail); msg(""); };
   sb.auth.onAuthStateChange((_e, session) => { if (session) onReady(session); });
 }
 

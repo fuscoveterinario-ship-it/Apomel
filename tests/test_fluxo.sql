@@ -198,4 +198,11 @@ select pg_temp.check(
          where kind = 'movimento' and status = 'pendente') t),
   'alerta mostra o peso antes e na hora do movimento');
 
+-- 10) Limite de pedidos de código de acesso: 3 por e-mail a cada 15 min.
+select pg_temp.check(public.colmeia_login_allowed('Teste@Exemplo.com') and public.colmeia_login_allowed('teste@exemplo.com ')
+                     and public.colmeia_login_allowed('teste@exemplo.com'), 'três pedidos de código passam');
+select pg_temp.check(not public.colmeia_login_allowed('TESTE@exemplo.com'), 'quarto pedido em 15 min é recusado');
+select pg_temp.check(public.colmeia_login_allowed('outro@exemplo.com'), 'outro e-mail não é afetado');
+select pg_temp.check((select count(*) from public.colmeia_login_requests where email_hash like '%@%') = 0, 'guarda só o hash do e-mail');
+
 \echo 'TODOS OS TESTES PASSARAM'
