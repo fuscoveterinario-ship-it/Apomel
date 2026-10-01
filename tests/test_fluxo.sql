@@ -375,4 +375,30 @@ select pg_temp.check((select bool_and(mode = 'normal' and maintenance_until > no
 select pg_temp.check((select h.label from public.colmeia_harvests hv join public.colmeia_hives h on h.id = hv.hive_id
                       where hv.source = 'balanca') = 'Caixa 12', 'colheita da balança fica na colmeia do rastreador');
 
+-- 15) Teste do alerta na ativação: o movimento manda SMS de confirmação e não abre alerta.
+update public.colmeia_devices set maintenance_until = null, mode = 'normal' where id = 'CS-0002';
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+do $$ begin
+  perform public.colmeia_start_alert_test('CS-0002');
+  raise exception 'FALHOU: outro usuário iniciou o teste';
+exception when sqlstate 'P0002' then raise notice 'ok: só o dono inicia o teste do alerta';
+end $$;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select pg_temp.check(public.colmeia_start_alert_test('CS-0002') > now(), 'teste do alerta iniciado');
+reset role;
+select count(*) as alertas_antes from public.colmeia_alerts where device_id = 'CS-0002' \gset
+select pg_temp.check((public.colmeia_ingest_event('CS-0002', 50, 'movimento')->>'alert_open')::boolean = false,
+  'movimento no teste não deixa o rastreador vigiando');
+select pg_temp.check((select count(*) from public.colmeia_alerts where device_id = 'CS-0002') = :alertas_antes,
+  'teste não abre alerta');
+select pg_temp.check((select test_alert_ok_at is not null and test_alert_until is null from public.colmeia_devices
+                      where id = 'CS-0002'), 'teste marcado como OK');
+select pg_temp.check((select count(*) from public.colmeia_notifications where template = 'teste_alerta'
+                      and channel = 'sms' and body like 'BEE GUARD: teste do alerta OK. O rastreador da Caixa 13%') = 1,
+  'SMS de confirmação do teste');
+select public.colmeia_ingest_event('CS-0002', 51, 'movimento');
+select pg_temp.check((select count(*) from public.colmeia_alerts where device_id = 'CS-0002') = :alertas_antes + 1,
+  'depois do teste, o movimento volta a gerar alerta');
+
 \echo 'TODOS OS TESTES PASSARAM'

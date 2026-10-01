@@ -54,12 +54,61 @@
       <div><span>Posição</span><b id="t-pos"></b></div>
       <div><span>Última mensagem</span><b id="t-quando"></b></div>
     </div>
+    <div class="ajuda" id="teste-ajuda" hidden>
+      <p><b>Ainda não chegou nenhuma mensagem.</b> Confira:</p>
+      <ul>
+        <li>A bateria está carregada e bem encaixada (ou a chave está ligada)?</li>
+        <li>Leve o rastreador para perto de uma janela ou para fora de casa: ele precisa de sinal de celular.</li>
+        <li>O chip está encaixado e com plano de dados ativo?</li>
+      </ul>
+      <p>A tela continua esperando. Se não resolver, chame o suporte no
+        <a href="https://wa.me/5541996767045" target="_blank" rel="noopener">WhatsApp (41) 99676-7045</a>.</p>
+    </div>
+  </section>
+
+  <section class="card" id="passo-alerta" hidden>
+    <h2>3. Teste do alerta</h2>
+    <p>Vamos conferir se o aviso chega no seu celular. Este teste <b>não</b> dispara alarme de roubo.</p>
+    <button id="alerta-iniciar">Começar teste do alerta</button>
+    <p id="alerta-status"></p>
+    <div id="alerta-chegou" hidden>
+      <p><b>O SMS chegou no seu celular?</b></p>
+      <button class="ok" id="alerta-sim">Sim, chegou</button>
+      <button class="secundario" id="alerta-nao">Não chegou</button>
+    </div>
+    <div class="ajuda" id="alerta-ajuda" hidden></div>
+    <button class="link" id="alerta-pular">Pular este teste</button>
+  </section>
+
+  <section class="card" id="passo-balanca" hidden>
+    <h2>4. Teste da balança</h2>
+    <p>Este rastreador tem balança. Vamos ajustar o zero e conferir o peso.</p>
+    <div id="bal-a">
+      <p><b>Passo 1.</b> Deixe a balança <b>sem nada em cima</b> e toque no botão.</p>
+      <button id="bal-zero">A balança está vazia</button>
+    </div>
+    <div id="bal-b" hidden>
+      <p><b>Passo 2.</b> Coloque em cima um <b>peso conhecido</b> (ex.: galão de água de 5 litros = 5 kg)
+        e aperte o botão <b>RST</b> da placa. Em até 2 minutos chega a nova pesagem.</p>
+      <p id="bal-espera"><span class="status aviso">Aguardando a nova pesagem…</span></p>
+      <label>Peso colocado (kg)<input id="bal-kg" type="number" step="0.1" min="1" max="200" value="5" disabled></label>
+      <button id="bal-calibrar" disabled>Conferir o peso</button>
+    </div>
+    <div id="bal-c" hidden>
+      <p id="bal-resultado"></p>
+      <button class="ok" id="bal-certo">Está certo</button>
+      <button class="secundario" id="bal-refazer">Refazer</button>
+    </div>
+    <p class="erro" id="bal-erro"></p>
+    <button class="link" id="bal-pular">Pular (ajusto depois no painel)</button>
   </section>
 
   <section class="card" id="passo-pronto" hidden>
-    <h2>3. Pronto!</h2>
-    <p>Teste aprovado. Coloque o rastreador na caixa e leve ao apiário.
-       Se a caixa for mexida, você recebe um WhatsApp e um SMS perguntando se foi manutenção.</p>
+    <h2>Pronto!</h2>
+    <p>Coloque o rastreador na caixa e leve ao apiário. Se a caixa for mexida, você recebe um SMS
+       com um link para dizer se foi você (manutenção) ou não.</p>
+    <p><b>Importante:</b> já no apiário, abra <b>Meus rastreadores</b> e confira se o rastreador continua
+       comunicando e com sinal do chip. Em alguns lugares o sinal é fraco.</p>
     <a class="btn secundario" href="painel.html">Ver meus rastreadores</a>
   </section>
 </main>
@@ -160,11 +209,16 @@ f.onsubmit = async (ev) => {
 };
 
 // Espera o rastreador mandar uma mensagem depois da ativação.
+const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+let temBalanca = false;
 async function waitFirstMessage(sinceMs) {
+  const inicio = Date.now();
+  let comunicou = false;
   for (;;) {
     const { data } = await sb.from("colmeia_devices")
-      .select("last_seen_at,last_battery_mv,last_signal,last_lat,last_lon").eq("id", deviceId).single();
+      .select("last_seen_at,last_battery_mv,last_signal,last_lat,last_lon,last_scale_raw").eq("id", deviceId).single();
     if (data?.last_seen_at && new Date(data.last_seen_at).getTime() > sinceMs) {
+      show("#teste-ajuda", false);
       show("#teste-dados");
       const pct = batteryPct(data.last_battery_mv);
       $("#t-bat").textContent = pct === null ? "—" : `${pct}%`;
@@ -172,12 +226,108 @@ async function waitFirstMessage(sinceMs) {
       $("#t-pos").innerHTML = data.last_lat ? `<a href="${mapsLink(data.last_lat, data.last_lon)}" target="_blank">ver no mapa</a>` : "aguardando GPS…";
       $("#t-quando").textContent = ago(data.last_seen_at);
       $("#teste-status").innerHTML = '<span class="status ok">Rastreador comunicando</span>';
-      show("#passo-pronto");
+      temBalanca = data.last_scale_raw !== null && data.last_scale_raw !== undefined;
+      if (!comunicou) { comunicou = true; show("#passo-alerta"); }
       if (data.last_lat) return;
+    } else if (Date.now() - inicio > 5 * 60 * 1000) {
+      show("#teste-ajuda");
     }
-    await new Promise((r) => setTimeout(r, 5000));
+    await espera(5000);
   }
 }
+
+// Depois do teste do alerta: balança (se tiver) ou fim.
+function proximoDepoisDoAlerta() {
+  show("#passo-alerta", false);
+  if (temBalanca) show("#passo-balanca"); else show("#passo-pronto");
+}
+
+// Teste do alerta: o próximo movimento manda um SMS de confirmação, sem abrir alerta.
+let testeAtivo = 0;
+$("#alerta-iniciar").onclick = async () => {
+  const b = $("#alerta-iniciar");
+  b.disabled = true;
+  show("#alerta-chegou", false);
+  show("#alerta-ajuda", false);
+  const { data: ate, error } = await sb.rpc("colmeia_start_alert_test", { p_device_id: deviceId });
+  b.disabled = false;
+  if (error) { $("#alerta-status").innerHTML = `<span class="erro">${esc(errorText(error))}</span>`; return; }
+  const meu = ++testeAtivo;
+  const desde = Date.now() - 5000;
+  b.textContent = "Recomeçar o teste";
+  $("#alerta-status").innerHTML = '<span class="status aviso">Agora balance o rastreador por uns 10 segundos e aguarde…</span>';
+  while (meu === testeAtivo && Date.now() < new Date(ate).getTime()) {
+    const { data } = await sb.from("colmeia_devices").select("test_alert_ok_at,primary_phone").eq("id", deviceId).single();
+    if (data?.test_alert_ok_at && new Date(data.test_alert_ok_at).getTime() > desde) {
+      const d = String(data.primary_phone || "").replace(/\D/g, "").replace(/^55/, "");
+      const fone = d.length >= 10 ? `(${d.slice(0, 2)}) ${d.slice(2, -4)}-${d.slice(-4)}` : "seu celular";
+      $("#alerta-status").innerHTML = `<span class="status ok">Movimento detectado!</span> Enviamos um SMS para ${esc(fone)}.`;
+      show("#alerta-chegou");
+      return;
+    }
+    await espera(4000);
+  }
+  if (meu !== testeAtivo) return;
+  $("#alerta-status").innerHTML = '<span class="status aviso">Não detectamos movimento.</span>';
+  $("#alerta-ajuda").innerHTML = `<p>Balance o rastreador com mais força por uns 10 segundos, perto de uma janela,
+    e toque em <b>Recomeçar o teste</b>. Se continuar, chame o suporte no
+    <a href="https://wa.me/5541996767045" target="_blank" rel="noopener">WhatsApp (41) 99676-7045</a>.</p>`;
+  show("#alerta-ajuda");
+};
+$("#alerta-sim").onclick = () => { testeAtivo++; proximoDepoisDoAlerta(); };
+$("#alerta-nao").onclick = () => {
+  $("#alerta-ajuda").innerHTML = `<p>O SMS pode levar alguns minutos. Se não chegar:</p><ul>
+    <li>Confira se o telefone principal está certo em <a href="apiarios.html">Meus apiários</a>.</li>
+    <li>Veja se o celular está com sinal e se o SMS não foi para a pasta de spam.</li></ul>
+    <p>Depois toque em <b>Recomeçar o teste</b>, ou chame o suporte no
+    <a href="https://wa.me/5541996767045" target="_blank" rel="noopener">WhatsApp (41) 99676-7045</a>.</p>`;
+  show("#alerta-ajuda");
+};
+$("#alerta-pular").onclick = () => { testeAtivo++; proximoDepoisDoAlerta(); };
+
+// Teste da balança: zero com a balança vazia, depois um peso conhecido.
+const balErro = (t) => { $("#bal-erro").textContent = t || ""; };
+let zeroEm = 0;
+$("#bal-zero").onclick = async () => {
+  balErro();
+  $("#bal-zero").disabled = true;
+  const { error } = await sb.rpc("colmeia_scale_calibrate", { p_device_id: deviceId, p_step: "zero" });
+  $("#bal-zero").disabled = false;
+  if (error) return balErro(errorText(error));
+  zeroEm = Date.now();
+  show("#bal-a", false);
+  show("#bal-b");
+  $("#bal-kg").disabled = true;
+  $("#bal-calibrar").disabled = true;
+  $("#bal-espera").innerHTML = '<span class="status aviso">Aguardando a nova pesagem…</span>';
+  const meu = zeroEm;
+  while (meu === zeroEm) {
+    const { data } = await sb.from("colmeia_devices").select("last_scale_raw_at").eq("id", deviceId).single();
+    if (data?.last_scale_raw_at && new Date(data.last_scale_raw_at).getTime() > zeroEm) {
+      $("#bal-espera").innerHTML = '<span class="status ok">Nova pesagem recebida</span>';
+      $("#bal-kg").disabled = false;
+      $("#bal-calibrar").disabled = false;
+      return;
+    }
+    await espera(5000);
+  }
+};
+$("#bal-calibrar").onclick = async () => {
+  balErro();
+  const kg = Number(String($("#bal-kg").value).replace(",", "."));
+  $("#bal-calibrar").disabled = true;
+  const { data, error } = await sb.rpc("colmeia_scale_calibrate", { p_device_id: deviceId, p_step: "peso", p_kg: kg });
+  $("#bal-calibrar").disabled = false;
+  if (error) return balErro(errorText(error));
+  const lido = Number(data?.kg);
+  $("#bal-resultado").innerHTML = `A balança está lendo <b>${esc(lido.toLocaleString("pt-BR", { maximumFractionDigits: 1 }))} kg</b>
+    com o peso de ${esc(kg.toLocaleString("pt-BR"))} kg em cima.`;
+  show("#bal-b", false);
+  show("#bal-c");
+};
+$("#bal-certo").onclick = () => { zeroEm = -1; show("#passo-balanca", false); show("#passo-pronto"); };
+$("#bal-refazer").onclick = () => { zeroEm = -1; balErro(); show("#bal-c", false); show("#bal-b", false); show("#bal-a"); };
+$("#bal-pular").onclick = () => { zeroEm = -1; show("#passo-balanca", false); show("#passo-pronto"); };
 </script>
 </body>
 </html>

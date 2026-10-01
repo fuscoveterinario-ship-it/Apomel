@@ -27,6 +27,9 @@ button.secundario, .btn.secundario { background: transparent; color: var(--ink);
 button.perigo { background: var(--alerta); color: #fff; }
 button.ok { background: var(--ok); color: #fff; }
 button:disabled { opacity: .5; }
+button.link { background: transparent; color: var(--muted, #666); text-decoration: underline; font-size: 15px; font-weight: 400; padding: 8px; }
+.ajuda { border-left: 3px solid var(--mel); padding: 4px 0 4px 12px; margin: 12px 0; }
+.ajuda ul { margin: 6px 0; padding-left: 20px; }
 .msg { color: var(--muted); }
 .erro { color: var(--alerta); font-weight: 600; }
 .status { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 14px; font-weight: 700; }
