@@ -50,7 +50,10 @@ async function carregar() {
   document.title = `${apiarios.length > 1 ? (apicultor || "Apiários") : apiarios[0].name} · Bee Guard`;
 
   // Topo: apicultor e totais de todos os apiários do link.
-  const melAno = (id) => colheitas.filter((h) => (!id || h.apiary_id === id) && h.harvested_on.startsWith(String(ano)))
+  // Produção só aparece nos apiários com balança (colmeia sentinela).
+  const temBalanca = (id) => devices.some((d) => d.apiary_id === id && d.scale_factor !== null && d.scale_factor !== undefined);
+  const comBalanca = apiarios.filter((a) => temBalanca(a.id)).map((a) => a.id);
+  const melAno = (id) => colheitas.filter((h) => (id ? h.apiary_id === id : comBalanca.includes(h.apiary_id)) && h.harvested_on.startsWith(String(ano)))
     .reduce((t, h) => t + Number(h.kg), 0);
   $("#topo").innerHTML = `<article class="card topo">
       <h1>${esc(apicultor ? `Apicultor: ${apicultor}` : apiarios[0].name)}</h1>
@@ -58,7 +61,7 @@ async function carregar() {
         <div><span>Apiários</span><b>${apiarios.length}</b></div>
         <div><span>Colmeias</span><b>${colmeias.length}</b></div>
         <div><span>Com rastreador</span><b>${devices.length}</b></div>
-        <div><span>Mel colhido em ${ano}</span><b>${kg(melAno())}</b></div>
+        ${comBalanca.length ? `<div><span>Mel colhido em ${ano}</span><b>${kg(melAno())}</b></div>` : ""}
       </div>
     </article>`;
   show("#topo");
@@ -103,7 +106,7 @@ async function carregar() {
         <div><span>Colmeias</span><b>${colmeias.filter((h) => h.apiary_id === a.id).length}</b></div>
         <div><span>Com rastreador</span><b>${ds.length}</b></div>
         <div><span>Peso (colmeia sentinela)</span><b>${sentinela ? esc(kg(sentinela.last_weight_kg)) : "—"}</b></div>
-        <div><span>Mel colhido em ${ano}</span><b>${esc(kg(melAno(a.id)))}</b></div>
+        ${temBalanca(a.id) ? `<div><span>Mel colhido em ${ano}</span><b>${esc(kg(melAno(a.id)))}</b></div>` : ""}
       </div>
     </article>`;
   };
@@ -126,7 +129,7 @@ async function carregar() {
   $("#lista").innerHTML = apiarios.map((a) => {
     const ds = ordenadas.filter((d) => d.apiary_id === a.id);
     return `<div class="bloco-apiario">${resumo(a, ds)}${ds.map(cartao).join("")}
-      ${producao([a], devices, colheitas, { readonly: true, hives: colmeias })}</div>`;
+      ${temBalanca(a.id) ? producao([a], devices, colheitas, { readonly: true, hives: colmeias }) : ""}</div>`;
   }).join("");
   show("#lista");
   show("#rodape");
