@@ -69,13 +69,15 @@ async function carregar() {
   show("#barra");
   // Link só de visualização: de um apiário ou (apiário vazio) de todos.
 async function compartilhar(b, apiaryId) {
+  const exata = confirm("Mostrar a localização EXATA das caixas no link (alfinete no mapa e Google Maps)?\n\n"
+    + "OK = localização exata (só mande para quem você confia)\nCancelar = só a região, cerca de 1 km (mais seguro)");
   b.disabled = true;
-  const { data: token, error } = await sb.rpc("colmeia_create_share_link", { p_apiary_id: apiaryId || null });
+  const { data: token, error } = await sb.rpc("colmeia_share_link", { p_apiary_id: apiaryId || null, p_exact: exata });
   b.disabled = false;
   if (error) return alert(errorText(error));
   const link = `${location.origin}/ver.html?t=${token}`;
   try { await navigator.clipboard.writeText(link); } catch { /* sem permissão: mostra o link */ }
-  prompt("Link copiado. Quem abrir vê as caixas e a produção, com localização aproximada e sem poder mudar nada (vale 90 dias):", link);
+  prompt(`Link copiado. Quem abrir vê as caixas e a produção, ${exata ? "com a localização exata" : "com a região aproximada"}, sem poder mudar nada (vale 90 dias):`, link);
 }
 $("#link-todos").onclick = (ev) => compartilhar(ev.currentTarget, null);
 

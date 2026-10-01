@@ -289,6 +289,17 @@ select pg_temp.check((select (v->>'todos')::boolean and jsonb_array_length(v->'a
                              and jsonb_array_length(v->'devices') >= 1
                       from (select public.colmeia_shared_view(:'tok_todos') v) x),
   'link de todos os apiários');
+reset role;
+set role authenticated;
+select public.colmeia_share_link(null, true) as tok_exato \gset
+select pg_temp.check(:'tok_exato' <> :'tok_todos' and :'tok_exato' = public.colmeia_share_link(null, true),
+  'link com localização exata é outro link (e é reaproveitado)');
+reset role;
+set role anon;
+select pg_temp.check((select (v->>'exata')::boolean and (v->'devices'->0->>'lat') is not null
+                      from (select public.colmeia_shared_view(:'tok_exato') v) x)
+                 and (select (v->'devices'->0->>'lat') is null from (select public.colmeia_shared_view(:'tok_todos') v) x),
+  'localização exata só no link em que o apicultor escolheu mostrar');
 do $$ begin
   perform public.colmeia_shared_view('token-falso');
   raise exception 'FALHOU: aceitou link falso';

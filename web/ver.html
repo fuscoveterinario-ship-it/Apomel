@@ -17,15 +17,14 @@
   <p class="erro card" id="erro" hidden></p>
   <section id="topo" hidden></section>
   <section class="card" id="mapa-card" hidden><h2>Mapa</h2><div id="map"></div>
-    <p class="msg">Localização aproximada (região de cerca de 1 km). O ponto exato das caixas não aparece neste link.</p></section>
+    <p class="msg" id="mapa-nota"></p></section>
   <section id="lista" hidden></section>
-  <section id="producao" hidden></section>
   <p class="msg rodape" id="rodape" hidden>Somente visualização. A página atualiza sozinha a cada minuto.</p>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script type="module">
-import { $, show, sb, ago, batteryPct, errorText, esc } from "./app.js";
+import { $, show, sb, ago, fmtDate, batteryPct, mapsLink, errorText, esc } from "./app.js";
 import { balanca, producao, statusDe } from "./render.js";
 
 let map, camada, enquadrado = false;
@@ -40,58 +39,96 @@ async function carregar() {
     show("#erro");
     return;
   }
-  const { devices, alertas, pesos, colheitas, colmeias = [] } = data;
+  const { devices, alertas, pesos, colheitas, colmeias = [], exata = false } = data;
   const apiarios = data.apiarios || [data.apiario];
   const nomeAp = Object.fromEntries(apiarios.map((a) => [a.id, a.name]));
   const nomeCol = (d) => colmeias.find((h) => h.id === d.hive_id)?.label || d.hive_label || d.id;
-  document.title = `${apiarios.length > 1 ? (apiarios[0].apicultor || "Apiários") : apiarios[0].name} · Bee Guard`;
+  const natural = (x, y) => String(x).localeCompare(String(y), "pt-BR", { numeric: true });
+  const kg = (n) => Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " kg";
+  const ano = new Date().getFullYear();
+  const apicultor = apiarios.find((a) => a.apicultor)?.apicultor;
+  document.title = `${apiarios.length > 1 ? (apicultor || "Apiários") : apiarios[0].name} · Bee Guard`;
 
-  $("#topo").innerHTML = apiarios.map((a) => {
-    const devs = devices.filter((d) => d.apiary_id === a.id);
-    const emAlerta = devs.filter((d) => statusDe(d, alertas)[0] === "alerta").length;
-    return `<article class="card topo">
-      <h1>${esc(a.name)}</h1>
-      <p class="sub">${a.apicultor ? `Apicultor: <b>${esc(a.apicultor)}</b>` : ""}${a.apicultor && a.city ? " · " : ""}${esc(a.city || "")}</p>
+  // Topo: apicultor e totais de todos os apiários do link.
+  const melAno = (id) => colheitas.filter((h) => (!id || h.apiary_id === id) && h.harvested_on.startsWith(String(ano)))
+    .reduce((t, h) => t + Number(h.kg), 0);
+  $("#topo").innerHTML = `<article class="card topo">
+      <h1>${esc(apicultor ? `Apicultor: ${apicultor}` : apiarios[0].name)}</h1>
       <div class="grid">
-        <div><span>Colmeias</span><b>${colmeias.filter((h) => h.apiary_id === a.id).length}</b></div>
-        <div><span>Com rastreador</span><b>${devs.length}</b></div>
-        <div><span>Em alerta</span><b>${emAlerta}</b></div>
+        <div><span>Apiários</span><b>${apiarios.length}</b></div>
+        <div><span>Colmeias</span><b>${colmeias.length}</b></div>
+        <div><span>Com rastreador</span><b>${devices.length}</b></div>
+        <div><span>Mel colhido em ${ano}</span><b>${kg(melAno())}</b></div>
       </div>
     </article>`;
-  }).join("");
   show("#topo");
 
-  const pts = devices.filter((d) => d.regiao_lat !== null && d.regiao_lat !== undefined);
-  if (pts.length && window.L) {
+  // Mapa: alfinete no ponto exato (se o apicultor escolheu mostrar) ou círculo da região.
+  const comLocal = devices.filter((d) => (exata ? d.lat : d.regiao_lat) !== null && (exata ? d.lat : d.regiao_lat) !== undefined);
+  if (comLocal.length && window.L) {
     show("#mapa-card");
+    $("#mapa-nota").textContent = exata ? "Toque no alfinete para ver o nome da colmeia."
+      : "Localização aproximada (região de cerca de 1 km). O ponto exato das caixas não aparece neste link.";
     if (!map) {
       map = L.map("map");
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
     }
     if (camada) camada.remove();
-    camada = L.featureGroup(pts.map((d) => L.circle([Number(d.regiao_lat), Number(d.regiao_lon)], {
-      radius: 600, color: statusDe(d, alertas)[0] === "alerta" ? "#c62828" : "#e0a100", fillOpacity: 0.25,
-    }).bindPopup(`<b>${esc(nomeCol(d))}</b><br>${esc(nomeAp[d.apiary_id] || "")}`))).addTo(map);
-    if (!enquadrado) { map.fitBounds(camada.getBounds(), { maxZoom: 13, padding: [30, 30] }); enquadrado = true; }
+    camada = L.featureGroup(comLocal.map((d) => {
+      const popup = `<b>${esc(nomeCol(d))}</b><br>${esc(nomeAp[d.apiary_id] || "")}`;
+      if (exata) return L.marker([Number(d.lat), Number(d.lon)]).bindPopup(popup);
+      return L.circle([Number(d.regiao_lat), Number(d.regiao_lon)], {
+        radius: 600, color: statusDe(d, alertas)[0] === "alerta" ? "#c62828" : "#e0a100", fillOpacity: 0.25,
+      }).bindPopup(popup);
+    })).addTo(map);
+    if (!enquadrado) { map.fitBounds(camada.getBounds(), { maxZoom: exata ? 16 : 13, padding: [30, 30] }); enquadrado = true; }
   }
 
-  $("#lista").innerHTML = devices.map((d) => {
+  // Situação do apiário: ataque (2+ caixas em alerta), alerta, manutenção ou protegido.
+  const situacao = (ds) => {
+    const emAlerta = ds.filter((d) => statusDe(d, alertas)[0] === "alerta");
+    if (emAlerta.length >= 2) return ["alerta", `ATAQUE AO APIÁRIO: ${emAlerta.length} caixas`];
+    if (emAlerta.length === 1) return ["alerta", `alerta em ${nomeCol(emAlerta[0])}`];
+    if (ds.length && ds.every((d) => d.maintenance_until && new Date(d.maintenance_until) > new Date())) {
+      return ["aviso", `manutenção até ${fmtDate(ds[0].maintenance_until)}`];
+    }
+    return ["ok", ds.length ? "protegido" : "sem rastreador"];
+  };
+  const resumo = (a, ds) => {
+    const [cls, txt] = situacao(ds);
+    const sentinela = ds.find((d) => d.last_weight_kg !== null && d.last_weight_kg !== undefined);
+    return `<article class="card grupo ${cls === "alerta" ? "grupo-alerta" : ""}">
+      <h2>${esc(a.name)} <span class="status ${cls}">${esc(txt)}</span><small>${esc(a.city || "")}</small></h2>
+      <div class="grid">
+        <div><span>Colmeias</span><b>${colmeias.filter((h) => h.apiary_id === a.id).length}</b></div>
+        <div><span>Com rastreador</span><b>${ds.length}</b></div>
+        <div><span>Peso (colmeia sentinela)</span><b>${sentinela ? esc(kg(sentinela.last_weight_kg)) : "—"}</b></div>
+        <div><span>Mel colhido em ${ano}</span><b>${esc(kg(melAno(a.id)))}</b></div>
+      </div>
+    </article>`;
+  };
+  const cartao = (d) => {
     const [cls, txt] = statusDe(d, alertas);
     const pct = batteryPct(d.last_battery_mv);
     return `<article class="card">
       <h2>${esc(nomeCol(d))} <span class="status ${cls}">${esc(txt)}</span></h2>
       <div class="grid">
-        <div><span>Colmeia</span><b>${esc(nomeCol(d))}</b></div>
         <div><span>Apiário</span><b>${esc(nomeAp[d.apiary_id] || "—")}</b></div>
+        <div><span>Rastreador</span><b>${esc(d.id)}</b></div>
         <div><span>Última mensagem</span><b>${ago(d.last_seen_at)}</b></div>
         <div><span>Bateria</span><b>${pct === null ? "—" : pct + "%"}</b></div>
       </div>
       ${balanca(d, pesos.filter((p) => p.device_id === d.id), { readonly: true })}
+      ${exata && d.lat ? `<a class="btn secundario" target="_blank" rel="noopener" href="${mapsLink(d.lat, d.lon)}">Ver no Google Maps</a>` : ""}
     </article>`;
-  }).join("") || '<p class="card">Nenhuma caixa com rastreador.</p>';
+  };
+  const ordenadas = [...devices].sort((x, y) => natural(nomeCol(x), nomeCol(y)));
+  $("#lista").innerHTML = apiarios.map((a) => {
+    const ds = ordenadas.filter((d) => d.apiary_id === a.id);
+    return `<div class="bloco-apiario">${resumo(a, ds)}${ds.map(cartao).join("")}
+      ${producao([a], devices, colheitas, { readonly: true, hives: colmeias })}</div>`;
+  }).join("");
   show("#lista");
-  $("#producao").innerHTML = producao(apiarios, devices, colheitas, { readonly: true, hives: colmeias });
-  show("#producao");
   show("#rodape");
 }
 
