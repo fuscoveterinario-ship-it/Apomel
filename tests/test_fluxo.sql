@@ -250,10 +250,12 @@ select public.colmeia_create_share_link((select id from public.colmeia_apiaries 
 select pg_temp.check(:'tok' = public.colmeia_create_share_link((select id from public.colmeia_apiaries limit 1)),
   'link reaproveitado');
 reset role;
+select apiary_id as ap_tok from public.colmeia_share_links where token = :'tok' \gset
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select set_config('beeguard.ap_tok', :'ap_tok', false);
 do $$ begin
-  perform public.colmeia_create_share_link((select id from public.colmeia_apiaries limit 1));
+  perform public.colmeia_create_share_link(current_setting('beeguard.ap_tok')::uuid);
   raise exception 'FALHOU: outro usuário gerou link';
 exception when sqlstate 'P0002' then raise notice 'ok: só o dono gera link';
 end $$;
@@ -269,6 +271,24 @@ where id = (select apiary_id from public.colmeia_share_links where token = :'tok
 set role anon;
 select pg_temp.check((select public.colmeia_shared_view(:'tok')->'apiario'->>'apicultor') = 'Apicultor Exemplo',
   'link mostra o nome do apicultor');
+reset role;
+update public.colmeia_devices set last_lat = -25.123456, last_lon = -49.087654
+where apiary_id = (select apiary_id from public.colmeia_share_links where token = :'tok');
+set role anon;
+select pg_temp.check((select (v->'devices'->0->>'regiao_lat')::numeric = -25.12 and (v->'devices'->0->>'regiao_lon')::numeric = -49.09
+                             and v::text not like '%123456%'
+                      from (select public.colmeia_shared_view(:'tok') v) x),
+  'mapa do link mostra só a região (coordenada arredondada)');
+reset role;
+select set_config('request.jwt.claim.sub', (select owner_id::text from public.colmeia_share_links where token = :'tok'), false);
+set role authenticated;
+select public.colmeia_create_share_link(null) as tok_todos \gset
+reset role;
+set role anon;
+select pg_temp.check((select (v->>'todos')::boolean and jsonb_array_length(v->'apiarios') >= 1
+                             and jsonb_array_length(v->'devices') >= 1
+                      from (select public.colmeia_shared_view(:'tok_todos') v) x),
+  'link de todos os apiários');
 do $$ begin
   perform public.colmeia_shared_view('token-falso');
   raise exception 'FALHOU: aceitou link falso';

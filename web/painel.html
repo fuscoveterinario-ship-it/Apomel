@@ -21,6 +21,7 @@
       <button type="button" data-ver="apiario">Apiário</button>
     </div>
     <a class="btn secundario" href="apiarios.html">Meus apiários e colmeias</a>
+    <button type="button" class="secundario" id="link-todos">Link de todos os apiários</button>
   </nav>
   <section id="lista" hidden></section>
   <section id="producao" hidden></section>
@@ -66,7 +67,19 @@ async function carregar() {
   if (error) { $("#lista").innerHTML = `<p class="erro card">${esc(errorText(error))}</p>`; return; }
   const nomeApiario = Object.fromEntries((apiarios || []).map((a) => [a.id, a.name]));
   show("#barra");
-  document.querySelectorAll("[data-ver]").forEach((b) => b.classList.toggle("ativo", b.dataset.ver === ver));
+  // Link só de visualização: de um apiário ou (apiário vazio) de todos.
+async function compartilhar(b, apiaryId) {
+  b.disabled = true;
+  const { data: token, error } = await sb.rpc("colmeia_create_share_link", { p_apiary_id: apiaryId || null });
+  b.disabled = false;
+  if (error) return alert(errorText(error));
+  const link = `${location.origin}/ver.html?t=${token}`;
+  try { await navigator.clipboard.writeText(link); } catch { /* sem permissão: mostra o link */ }
+  prompt("Link copiado. Quem abrir vê as caixas e a produção, com localização aproximada e sem poder mudar nada (vale 90 dias):", link);
+}
+$("#link-todos").onclick = (ev) => compartilhar(ev.currentTarget, null);
+
+document.querySelectorAll("[data-ver]").forEach((b) => b.classList.toggle("ativo", b.dataset.ver === ver));
   const aps = apiarios || [], hs = hives || [], al = alertas || [];
   const opts = { abertos, hives: hs };
 
@@ -164,15 +177,7 @@ async function carregar() {
   document.querySelectorAll("[data-delcol]").forEach((b) => b.onclick = () => {
     if (confirm("Apagar esta colheita?")) rpc(b, "colmeia_delete_harvest", { p_id: Number(b.dataset.delcol) });
   });
-  document.querySelectorAll("[data-share]").forEach((b) => b.onclick = async () => {
-    b.disabled = true;
-    const { data: token, error } = await sb.rpc("colmeia_create_share_link", { p_apiary_id: b.dataset.share });
-    b.disabled = false;
-    if (error) return alert(errorText(error));
-    const link = `${location.origin}/ver.html?t=${token}`;
-    try { await navigator.clipboard.writeText(link); } catch { /* sem permissão: mostra o link */ }
-    prompt("Link copiado. Quem abrir vê o apiário, sem localização e sem poder mudar nada (vale 90 dias):", link);
-  });
+  document.querySelectorAll("[data-share]").forEach((b) => b.onclick = () => compartilhar(b, b.dataset.share));
   document.querySelectorAll("[data-mnt-ap]").forEach((b) => b.onclick = async () => {
     const { error } = await sb.rpc("colmeia_set_apiary_maintenance", { p_apiary_id: b.dataset.mntAp, p_minutes: 120 });
     if (error) alert(errorText(error)); else { alert("Apiário em manutenção por 2 horas: mexer nas caixas não gera alerta."); carregar(); }

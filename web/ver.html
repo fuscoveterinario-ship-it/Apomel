@@ -8,23 +8,27 @@
 <link rel="icon" href="icone.png">
 <link rel="apple-touch-icon" href="icone.png">
 <meta name="theme-color" content="#111111">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
 <header><a class="marca" href="index.html"><img src="icone.png" alt="" width="40" height="40"><span>BEEGUARD<small>Visualização do apiário</small></span></a></header>
 <main>
   <section class="card" id="carregando"><p>Carregando…</p></section>
   <p class="erro card" id="erro" hidden></p>
-  <section class="card topo" id="topo" hidden></section>
+  <section id="topo" hidden></section>
+  <section class="card" id="mapa-card" hidden><h2>Mapa</h2><div id="map"></div>
+    <p class="msg">Localização aproximada (região de cerca de 1 km). O ponto exato das caixas não aparece neste link.</p></section>
   <section id="lista" hidden></section>
   <section id="producao" hidden></section>
-  <p class="msg rodape" id="rodape" hidden>Somente visualização. A localização das caixas não aparece neste link.
-    A página atualiza sozinha a cada minuto.</p>
+  <p class="msg rodape" id="rodape" hidden>Somente visualização. A página atualiza sozinha a cada minuto.</p>
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script type="module">
 import { $, show, sb, ago, batteryPct, errorText, esc } from "./app.js";
 import { balanca, producao, statusDe } from "./render.js";
 
+let map, camada, enquadrado = false;
 const token = new URLSearchParams(location.search).get("t") || "";
 
 async function carregar() {
@@ -36,33 +40,57 @@ async function carregar() {
     show("#erro");
     return;
   }
-  const { apiario, devices, alertas, pesos, colheitas, colmeias } = data;
-  document.title = `${apiario.name} · Bee Guard`;
-  const emAlerta = devices.filter((d) => statusDe(d, alertas)[0] === "alerta").length;
-  $("#topo").innerHTML = `<h1>${esc(apiario.name)}</h1>
-    <p class="sub">${apiario.apicultor ? `Apicultor: <b>${esc(apiario.apicultor)}</b>` : ""}${apiario.apicultor && apiario.city ? " · " : ""}${esc(apiario.city || "")}</p>
-    <div class="grid">
-      <div><span>Colmeias</span><b>${(colmeias || []).length}</b></div>
-      <div><span>Com rastreador</span><b>${devices.length}</b></div>
-      <div><span>Em alerta</span><b>${emAlerta}</b></div>
-    </div>`;
+  const { devices, alertas, pesos, colheitas, colmeias = [] } = data;
+  const apiarios = data.apiarios || [data.apiario];
+  const nomeAp = Object.fromEntries(apiarios.map((a) => [a.id, a.name]));
+  const nomeCol = (d) => colmeias.find((h) => h.id === d.hive_id)?.label || d.hive_label || d.id;
+  document.title = `${apiarios.length > 1 ? (apiarios[0].apicultor || "Apiários") : apiarios[0].name} · Bee Guard`;
+
+  $("#topo").innerHTML = apiarios.map((a) => {
+    const devs = devices.filter((d) => d.apiary_id === a.id);
+    const emAlerta = devs.filter((d) => statusDe(d, alertas)[0] === "alerta").length;
+    return `<article class="card topo">
+      <h1>${esc(a.name)}</h1>
+      <p class="sub">${a.apicultor ? `Apicultor: <b>${esc(a.apicultor)}</b>` : ""}${a.apicultor && a.city ? " · " : ""}${esc(a.city || "")}</p>
+      <div class="grid">
+        <div><span>Colmeias</span><b>${colmeias.filter((h) => h.apiary_id === a.id).length}</b></div>
+        <div><span>Com rastreador</span><b>${devs.length}</b></div>
+        <div><span>Em alerta</span><b>${emAlerta}</b></div>
+      </div>
+    </article>`;
+  }).join("");
   show("#topo");
-  $("#lista").innerHTML = (devices.length ? devices : []).map((d) => {
+
+  const pts = devices.filter((d) => d.regiao_lat !== null && d.regiao_lat !== undefined);
+  if (pts.length && window.L) {
+    show("#mapa-card");
+    if (!map) {
+      map = L.map("map");
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+    }
+    if (camada) camada.remove();
+    camada = L.featureGroup(pts.map((d) => L.circle([Number(d.regiao_lat), Number(d.regiao_lon)], {
+      radius: 600, color: statusDe(d, alertas)[0] === "alerta" ? "#c62828" : "#e0a100", fillOpacity: 0.25,
+    }).bindPopup(`<b>${esc(nomeCol(d))}</b><br>${esc(nomeAp[d.apiary_id] || "")}`))).addTo(map);
+    if (!enquadrado) { map.fitBounds(camada.getBounds(), { maxZoom: 13, padding: [30, 30] }); enquadrado = true; }
+  }
+
+  $("#lista").innerHTML = devices.map((d) => {
     const [cls, txt] = statusDe(d, alertas);
     const pct = batteryPct(d.last_battery_mv);
     return `<article class="card">
-      <h2>${esc(d.hive_label || d.id)} <span class="status ${cls}">${esc(txt)}</span></h2>
+      <h2>${esc(nomeCol(d))} <span class="status ${cls}">${esc(txt)}</span></h2>
       <div class="grid">
-        <div><span>Colmeia</span><b>${esc((colmeias || []).find((h) => h.id === d.hive_id)?.label || d.hive_label || d.id)}</b></div>
-        <div><span>Rastreador</span><b>${esc(d.id)}</b></div>
+        <div><span>Colmeia</span><b>${esc(nomeCol(d))}</b></div>
+        <div><span>Apiário</span><b>${esc(nomeAp[d.apiary_id] || "—")}</b></div>
         <div><span>Última mensagem</span><b>${ago(d.last_seen_at)}</b></div>
         <div><span>Bateria</span><b>${pct === null ? "—" : pct + "%"}</b></div>
       </div>
       ${balanca(d, pesos.filter((p) => p.device_id === d.id), { readonly: true })}
     </article>`;
-  }).join("") || '<p class="card">Nenhuma caixa com rastreador neste apiário.</p>';
+  }).join("") || '<p class="card">Nenhuma caixa com rastreador.</p>';
   show("#lista");
-  $("#producao").innerHTML = producao([apiario], devices, colheitas, { readonly: true, hives: colmeias || [] });
+  $("#producao").innerHTML = producao(apiarios, devices, colheitas, { readonly: true, hives: colmeias });
   show("#producao");
   show("#rodape");
 }
