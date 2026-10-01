@@ -1,6 +1,6 @@
 :root {
-  --bg: #fbf8f1; --card: #ffffff; --ink: #2b2417; --muted: #6f6453; --line: #e6dccb;
-  --mel: #d99a1e; --mel-dark: #a86f00; --ok: #2e7d32; --alerta: #c62828; --aviso: #b26a00;
+  --bg: #ffffff; --card: #fafafa; --ink: #2b2417; --muted: #6f6453; --line: #e6dccb;
+  --mel: #f5c400; --mel-dark: #a88600; --ok: #2e7d32; --alerta: #c62828; --aviso: #b26a00;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -10,8 +10,11 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-header { background: var(--mel); color: #221a08; padding: 14px 16px; font-weight: 700; font-size: 20px; }
-header small { display: block; font-weight: 400; font-size: 14px; }
+header { background: #111111; color: #ffffff; padding: 10px 16px; border-bottom: 4px solid #f5c400; }
+header .marca { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; font-weight: 800; font-size: 20px; letter-spacing: .04em; }
+header .marca img { width: 40px; height: 40px; border-radius: 8px; background: #fff; flex: none; }
+header small { display: block; font-weight: 400; font-size: 14px; letter-spacing: 0; color: #f5c400; }
+.logo { display: block; width: min(320px, 80%); height: auto; margin: 0 auto 16px; }
 main { max-width: 640px; margin: 0 auto; padding: 16px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 0 0 16px; }
 h1, h2 { line-height: 1.2; margin: 0 0 12px; }
