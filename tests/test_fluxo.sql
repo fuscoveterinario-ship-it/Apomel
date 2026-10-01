@@ -205,4 +205,42 @@ select pg_temp.check(not public.colmeia_login_allowed('TESTE@exemplo.com'), 'qua
 select pg_temp.check(public.colmeia_login_allowed('outro@exemplo.com'), 'outro e-mail não é afetado');
 select pg_temp.check((select count(*) from public.colmeia_login_requests where email_hash like '%@%') = 0, 'guarda só o hash do e-mail');
 
+-- 11) Produção de mel: registro manual (só no apiário do dono) e colheita pela balança.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select pg_temp.check(public.colmeia_add_harvest((select id from public.colmeia_apiaries limit 1), 'CS-0001',
+  current_date, 18.5, 'Florada de eucalipto') > 0, 'registra colheita manual');
+select pg_temp.check(public.colmeia_add_harvest((select id from public.colmeia_apiaries limit 1), '',
+  current_date - 30, 120, null) > 0, 'registra colheita do apiário todo');
+select pg_temp.check((select sum(kg) from public.colmeia_harvests) = 138.5, 'dono vê as colheitas');
+do $$ begin
+  perform public.colmeia_add_harvest((select id from public.colmeia_apiaries limit 1), '', current_date, 0);
+  raise exception 'FALHOU: aceitou 0 kg';
+exception when sqlstate '22023' then raise notice 'ok: recusa quantidade inválida';
+end $$;
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select pg_temp.check((select count(*) from public.colmeia_harvests) = 0, 'outro usuário não vê colheitas (RLS)');
+do $$ begin
+  perform public.colmeia_add_harvest((select id from public.colmeia_apiaries limit 1), '', current_date, 10);
+  raise exception 'FALHOU: registrou no apiário de outro';
+exception when sqlstate 'P0002' then raise notice 'ok: não registra no apiário de outro';
+end $$;
+reset role;
+
+-- Balança: melgueira colocada com 40 kg, colmeia chega a 58 kg e cai para 41 kg (colheita).
+update public.colmeia_devices set harvest_base_at = now() - interval '20 days', harvest_base_kg = 40, maintenance_until = null
+where id = 'CS-0001';
+delete from public.colmeia_weights;
+insert into public.colmeia_weights (device_id, measured_at, raw, kg) values
+  ('CS-0001', now() - interval '6 hours', 580000, 58), ('CS-0001', now() - interval '3 hours', 410000, 41);
+select public.colmeia_check_weight_alerts('CS-0001');
+select pg_temp.check((select kg from public.colmeia_harvests where source = 'balanca') = 18,
+  'colheita estimada pela balança (peso ganho desde a melgueira)');
+select pg_temp.check((select harvest_base_kg is null from public.colmeia_devices where id = 'CS-0001'),
+  'nova safra começa depois da colheita');
+select public.colmeia_check_weight_alerts('CS-0001');
+select pg_temp.check((select count(*) from public.colmeia_harvests where source = 'balanca') = 1, 'colheita pela balança não duplica');
+
 \echo 'TODOS OS TESTES PASSARAM'

@@ -35,6 +35,7 @@ o contato secundário é avisado e o rastreador entra em **modo roubo** (posiç�
 | Rastreador em silêncio | Sem mensagem além do esperado (ex.: destruído): aviso "sem comunicação". |
 | Bateria baixa | Um aviso por dia. |
 | Balança (colmeia sentinela) | Aviso de colheita (ganho de peso desde a melgueira), de falta de alimento e de possível enxameação. |
+| Produção de mel | Colheitas por apiário e por caixa (registro manual ou estimado pela balança), total do ano e gráfico por mês no painel. |
 
 Sem internet no apiário, a placa manda **SMS direto** para os telefones cadastrados e guarda o
 evento para reenviar. O mesmo caminho por SMS servirá para a conexão via satélite (Starlink
