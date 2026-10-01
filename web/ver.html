@@ -53,7 +53,7 @@ async function carregar() {
     return `<article class="card">
       <h2>${esc(d.hive_label || d.id)} <span class="status ${cls}">${esc(txt)}</span></h2>
       <div class="grid">
-        <div><span>Apiário</span><b>${esc(apiario.name)}</b></div>
+        <div><span>Colmeia</span><b>${esc((colmeias || []).find((h) => h.id === d.hive_id)?.label || d.hive_label || d.id)}</b></div>
         <div><span>Rastreador</span><b>${esc(d.id)}</b></div>
         <div><span>Última mensagem</span><b>${ago(d.last_seen_at)}</b></div>
         <div><span>Bateria</span><b>${pct === null ? "—" : pct + "%"}</b></div>
