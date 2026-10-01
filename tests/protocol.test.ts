@@ -105,3 +105,24 @@ test("corpo no formato exato do firmware é aceito", () => {
   assert.equal(ev[1].lat, null);
   assert.deepEqual(ev[1].payload, { age: 35, fw: "0.1.0" });
 });
+
+test("SMS pela Mobizon: chave na URL, número só com dígitos e erro lido do corpo", async () => {
+  const n = { id: 1, to_phone: "+55 41 99676-7045", channel: "sms" as const, template: "alerta_movimento",
+    body: "ALERTA BEE GUARD: teste", params: {} };
+  const env = (k: string) => ({ SMS_PROVIDER: "mobizon", MOBIZON_API_KEY: "k1" } as Record<string, string>)[k];
+  const req = smsRequest(n, env)!;
+  assert.match(req.url, /^https:\/\/api\.mobizon\.com\.br\/service\/message\/sendsmsmessage\?.*apiKey=k1/);
+  const form = new URLSearchParams(await req.text());
+  assert.equal(form.get("recipient"), "5541996767045");
+  assert.equal(form.get("text"), "ALERTA BEE GUARD: teste");
+  assert.equal(form.get("from"), null);
+  assert.deepEqual(await send(n, env, async () => new Response('{"code":0,"data":{"messageId":"1"},"message":""}')),
+    { status: "enviado" });
+  const r = await send(n, env, async () => new Response('{"code":1,"data":[],"message":"saldo insuficiente"}'));
+  assert.equal(r.status, "falhou");
+  assert.match(r.error!, /saldo insuficiente/);
+  const rede = await send(n, env, async () => { throw new Error("error sending request for url (https://api.mobizon.com.br/x?apiKey=k1)"); });
+  assert.equal(rede.status, "falhou");
+  assert.doesNotMatch(rede.error!, /k1/);
+  assert.equal(smsRequest(n, (k) => (k === "SMS_PROVIDER" ? "mobizon" : undefined)), null);
+});

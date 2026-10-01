@@ -59,6 +59,8 @@ dá para testar o fluxo inteiro sem gastar nada.
 
 **SMS** (escolha um):
 ```bash
+supabase secrets set SMS_PROVIDER=mobizon MOBIZON_API_KEY=...   # pré-pago, aceita Pix (MOBIZON_FROM opcional)
+# ou
 supabase secrets set SMS_PROVIDER=zenvia ZENVIA_TOKEN=... ZENVIA_FROM=...
 # ou
 supabase secrets set SMS_PROVIDER=twilio TWILIO_SID=... TWILIO_TOKEN=... TWILIO_FROM=+1...

@@ -74,6 +74,21 @@ export function smsRequest(n: Notification, env: Env): Request | null {
     });
   }
 
+  if (provider === "mobizon") {
+    // Mobizon Brasil (pré-pago, aceita Pix). O remetente só vai se estiver aprovado na conta.
+    const key = env("MOBIZON_API_KEY");
+    if (!key) return null;
+    const form = new URLSearchParams({ recipient: digits(n.to_phone), text });
+    const from = env("MOBIZON_FROM");
+    if (from) form.set("from", from);
+    const url = `https://api.mobizon.com.br/service/message/sendsmsmessage?output=json&api=v1&apiKey=${encodeURIComponent(key)}`;
+    return new Request(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+  }
+
   if (provider === "twilio") {
     const sid = env("TWILIO_SID");
     const auth = env("TWILIO_TOKEN");
@@ -97,9 +112,17 @@ export async function send(n: Notification, env: Env, doFetch: typeof fetch = fe
   if (!req) return { status: "simulado" };
   try {
     const res = await doFetch(req);
+    // A Mobizon responde HTTP 200 também nos erros: o resultado vem em "code" (0 = aceito).
+    if (res.ok && new URL(req.url).hostname.endsWith("mobizon.com.br")) {
+      const body = await res.text();
+      let code: unknown;
+      try { code = JSON.parse(body).code; } catch { /* resposta inesperada */ }
+      return code === 0 ? { status: "enviado" } : { status: "falhou", error: `Mobizon: ${body.slice(0, 300)}` };
+    }
     if (res.ok) return { status: "enviado" };
     return { status: "falhou", error: `HTTP ${res.status}: ${(await res.text()).slice(0, 300)}` };
   } catch (e) {
-    return { status: "falhou", error: String(e).slice(0, 300) };
+    // Erro de rede pode trazer a URL; a chave da Mobizon vai na URL e não pode ficar gravada.
+    return { status: "falhou", error: String(e).replace(/apiKey=[^&\s)]+/gi, "apiKey=***").slice(0, 300) };
   }
 }
