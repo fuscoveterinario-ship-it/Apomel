@@ -49,6 +49,7 @@ export function mapsLink(lat, lon) {
 // Mensagem de erro amigável a partir do erro do Supabase.
 export function errorText(e) {
   const m = (e && (e.message || e.error_description || e.error)) || String(e);
+  if (/rate limit/i.test(m)) return "Muitos pedidos de acesso em pouco tempo. Use o último e-mail que chegou ou tente de novo em 1 hora.";
   if (/violates check constraint.*phone/i.test(m)) return "Telefone inválido. Use DDD + número, ex.: (41) 99999-0001.";
   return m;
 }
