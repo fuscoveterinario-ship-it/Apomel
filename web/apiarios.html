@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meus apiários</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="icone.png">
+<link rel="apple-touch-icon" href="icone.png">
+<meta name="theme-color" content="#111111">
+</head>
+<body>
+<header><a class="marca" href="index.html"><img src="icone.png" alt="" width="40" height="40"><span>BEEGUARD<small>Meus apiários e colmeias</small></span></a></header>
+<main>
+  <section class="card" id="login"><p class="msg">Carregando… (precisa de internet)</p></section>
+  <section id="lista" hidden></section>
+
+  <section class="card" id="novo" hidden>
+    <h2>Novo apiário</h2>
+    <form id="f-novo">
+      <label>Nome do apiário<input id="n-nome" name="nome" required maxlength="60" placeholder="Ex.: Sítio Santa Rita"></label>
+      <label>Município<input id="n-cidade" name="cidade" maxlength="80" placeholder="Ex.: Bocaiúva do Sul"></label>
+      <label>Telefone principal (recebe o 1º alerta)<input id="n-tel1" name="tel1" type="tel" placeholder="(41) 99999-0001"></label>
+      <label>Telefone secundário (avisado se ninguém responder)<input id="n-tel2" name="tel2" type="tel" placeholder="(41) 98888-0002"></label>
+      <label>Quantas colmeias tem neste apiário? (opcional)<input id="n-qtd" name="qtd" type="number" min="0" max="500" placeholder="Ex.: 20"></label>
+      <button>Criar apiário</button>
+      <p class="erro" id="n-erro"></p>
+    </form>
+  </section>
+
+  <a class="btn secundario" href="painel.html" id="voltar" hidden>Voltar ao painel</a>
+</main>
+
+<script type="module">
+import { $, show, sb, ensureLogin, normalizePhone, errorText, esc } from "./app.js";
+
+const fmtTel = (t) => {
+  const d = String(t || "").replace(/\D/g, "").replace(/^55/, "");
+  return d.length >= 10 ? `(${d.slice(0, 2)}) ${d.slice(2, -4)}-${d.slice(-4)}` : t || "—";
+};
+// Telefone opcional: vazio vira null; inválido gera erro.
+function tel(valor) {
+  const v = String(valor || "").trim();
+  if (!v) return null;
+  const n = normalizePhone(v);
+  if (!n) throw new Error("Telefone inválido. Use DDD + número, ex.: (41) 99999-0001.");
+  return n;
+}
+const faixa = (prefixo, de, ate) => {
+  const out = [];
+  for (let i = de; i <= ate && out.length < 500; i++) out.push(`${prefixo} ${i}`);
+  return out;
+};
+
+async function carregar() {
+  const [{ data: aps, error }, { data: hives }, { data: devs }] = await Promise.all([
+    sb.from("colmeia_apiaries").select("id,name,city,primary_phone,secondary_phone").order("name"),
+    sb.from("colmeia_hives").select("id,apiary_id,label").order("label"),
+    sb.from("colmeia_devices").select("id,hive_id,scale_factor,last_scale_raw"),
+  ]);
+  if (error) { $("#lista").innerHTML = `<p class="erro card">${esc(errorText(error))}</p>`; show("#lista"); return; }
+  const porColmeia = Object.fromEntries((devs || []).filter((d) => d.hive_id).map((d) => [d.hive_id, d]));
+  const natural = (x, y) => x.label.localeCompare(y.label, "pt-BR", { numeric: true });
+  $("#lista").innerHTML = (aps || []).map((a) => {
+    const cs = (hives || []).filter((h) => h.apiary_id === a.id).sort(natural);
+    const comRastreador = cs.filter((h) => porColmeia[h.id]).length;
+    const aid = esc(a.id);
+    return `<article class="card apiario">
+      <h2>${esc(a.name)} <small>${esc(a.city || "")}</small></h2>
+      <div class="grid">
+        <div><span>Colmeias</span><b>${cs.length}</b></div>
+        <div><span>Com rastreador</span><b>${comRastreador}</b></div>
+        <div><span>Telefone principal</span><b>${esc(fmtTel(a.primary_phone))}</b></div>
+        <div><span>Telefone secundário</span><b>${esc(fmtTel(a.secondary_phone))}</b></div>
+      </div>
+      <h3>Colmeias</h3>
+      ${cs.length ? `<ul class="colmeias">${cs.map((h) => {
+        const d = porColmeia[h.id];
+        const bal = d && (d.scale_factor !== null || d.last_scale_raw !== null);
+        return `<li class="${d ? "tem" : ""}"><span>${esc(h.label)}</span>
+          ${d ? `<small>${esc(d.id)}${bal ? " · balança" : ""}</small>`
+              : `<button class="mini secundario" data-del="${esc(h.id)}" aria-label="Apagar ${esc(h.label)}">×</button>`}</li>`;
+      }).join("")}</ul><p class="msg legenda-col">Em amarelo: colmeia com rastreador.</p>`
+        : '<p class="msg">Nenhuma colmeia cadastrada ainda.</p>'}
+      <details>
+        <summary>Adicionar colmeias</summary>
+        <div class="faixa">
+          <label>Nome<input id="pf-${aid}" value="Caixa" maxlength="30"></label>
+          <label>De<input id="de-${aid}" type="number" min="1" value="${cs.length + 1}"></label>
+          <label>Até<input id="ate-${aid}" type="number" min="1" value="${cs.length + 10}"></label>
+        </div>
+        <button data-faixa="${aid}">Criar colmeias</button>
+        <label>Ou uma colmeia com nome próprio<input id="um-${aid}" maxlength="40" placeholder="Ex.: Caixa da divisa"></label>
+        <button class="secundario" data-uma="${aid}">Criar esta colmeia</button>
+      </details>
+      <details>
+        <summary>Editar dados do apiário</summary>
+        <label>Nome<input id="e-nome-${aid}" value="${esc(a.name)}" maxlength="60"></label>
+        <label>Município<input id="e-cid-${aid}" value="${esc(a.city || "")}" maxlength="80"></label>
+        <label>Telefone principal<input id="e-t1-${aid}" type="tel" value="${esc(fmtTel(a.primary_phone).replace("—", ""))}"></label>
+        <label>Telefone secundário<input id="e-t2-${aid}" type="tel" value="${esc(fmtTel(a.secondary_phone).replace("—", ""))}"></label>
+        <button data-salvar="${aid}">Salvar</button>
+        <p class="msg">Os rastreadores que usam os telefones do apiário passam a usar os novos.</p>
+      </details>
+    </article>`;
+  }).join("") || '<p class="card">Você ainda não tem apiários. Crie o primeiro abaixo.</p>';
+  show("#lista");
+
+  const rpc = async (b, nome, args, ok) => {
+    b.disabled = true;
+    const { data, error } = await sb.rpc(nome, args);
+    b.disabled = false;
+    if (error) return alert(errorText(error));
+    if (ok) alert(typeof ok === "function" ? ok(data) : ok);
+    carregar();
+  };
+  const val = (id) => document.getElementById(id).value.trim();
+  document.querySelectorAll("[data-faixa]").forEach((b) => b.onclick = () => {
+    const id = b.dataset.faixa;
+    const de = Number(val(`de-${id}`)), ate = Number(val(`ate-${id}`));
+    if (!de || !ate || ate < de) return alert("Informe de qual número até qual número.");
+    rpc(b, "colmeia_add_hives", { p_apiary_id: id, p_labels: faixa(val(`pf-${id}`) || "Caixa", de, ate) },
+      (n) => `${n} colmeia(s) criada(s).`);
+  });
+  document.querySelectorAll("[data-uma]").forEach((b) => b.onclick = () => {
+    const id = b.dataset.uma;
+    if (!val(`um-${id}`)) return alert("Digite o nome da colmeia.");
+    rpc(b, "colmeia_add_hives", { p_apiary_id: id, p_labels: [val(`um-${id}`)] }, (n) => n ? "Colmeia criada." : "Já existe uma colmeia com esse nome.");
+  });
+  document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => {
+    if (confirm("Apagar esta colmeia? As colheitas dela ficam registradas no apiário.")) rpc(b, "colmeia_delete_hive", { p_hive_id: b.dataset.del });
+  });
+  document.querySelectorAll("[data-salvar]").forEach((b) => b.onclick = () => {
+    const id = b.dataset.salvar;
+    try {
+      rpc(b, "colmeia_save_apiary", { p_id: id, p_name: val(`e-nome-${id}`), p_city: val(`e-cid-${id}`),
+        p_primary_phone: tel(val(`e-t1-${id}`)), p_secondary_phone: tel(val(`e-t2-${id}`)) }, "Dados salvos.");
+    } catch (e) { alert(e.message); }
+  });
+}
+
+$("#f-novo").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  let t1, t2;
+  try { t1 = tel(f.tel1.value); t2 = tel(f.tel2.value); } catch (e) { $("#n-erro").textContent = e.message; return; }
+  f.querySelector("button").disabled = true;
+  const { data: id, error } = await sb.rpc("colmeia_save_apiary", { p_id: null, p_name: f.nome.value,
+    p_city: f.cidade.value, p_primary_phone: t1, p_secondary_phone: t2 });
+  if (!error && Number(f.qtd.value) > 0) {
+    await sb.rpc("colmeia_add_hives", { p_apiary_id: id, p_labels: faixa("Caixa", 1, Number(f.qtd.value)) });
+  }
+  f.querySelector("button").disabled = false;
+  if (error) { $("#n-erro").textContent = errorText(error); return; }
+  $("#n-erro").textContent = "";
+  f.reset();
+  carregar();
+};
+
+ensureLogin($("#login"), () => {
+  show("#login", false);
+  show("#novo");
+  show("#voltar");
+  carregar();
+});
+</script>
+</body>
+</html>

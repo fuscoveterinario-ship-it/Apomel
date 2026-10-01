@@ -18,14 +18,29 @@
     <h2>1. Dados da caixa</h2>
     <p class="passos">Rastreador <b id="d-id"></b>. Faça a ativação <b>num lugar com internet</b>, antes de levar a caixa ao apiário.</p>
     <form id="f-ativar">
-      <label>Código de ativação<input name="code" required autocomplete="off"></label>
-      <label>Apiário<input name="apiary" list="apiarios" required placeholder="Ex.: Sítio Santa Rita"></label>
-      <datalist id="apiarios"></datalist>
-      <label>Caixa / colmeia<input name="hive" required placeholder="Ex.: Caixa 12"></label>
-      <label>Telefone principal (recebe o 1º alerta)<input name="phone1" type="tel" required placeholder="(41) 99999-0001"></label>
-      <label>Telefone secundário (se ninguém responder em 5 min)<input name="phone2" type="tel" placeholder="(41) 98888-0002"></label>
+      <label>Código de ativação<input id="a-code" name="code" required autocomplete="off"></label>
+
+      <label>Apiário<select id="a-apiario" name="apiario" required></select></label>
+      <div id="novo-apiario" class="sub" hidden>
+        <label>Nome do novo apiário<input id="a-ap-nome" name="apNome" maxlength="60" placeholder="Ex.: Sítio Santa Rita"></label>
+        <label>Município<input id="a-ap-cid" name="apCidade" maxlength="80" placeholder="Ex.: Bocaiúva do Sul"></label>
+        <label>Telefone principal do apiário (recebe o 1º alerta)<input id="a-ap-t1" name="apTel1" type="tel" placeholder="(41) 99999-0001"></label>
+        <label>Telefone secundário do apiário<input id="a-ap-t2" name="apTel2" type="tel" placeholder="(41) 98888-0002"></label>
+      </div>
+
+      <label>Colmeia onde o rastreador vai ficar<select id="a-colmeia" name="colmeia" required></select></label>
+      <div id="nova-colmeia" class="sub" hidden>
+        <label>Nome da nova colmeia<input id="a-col-nome" name="colNome" maxlength="40" placeholder="Ex.: Caixa 12"></label>
+      </div>
+
+      <label class="check"><input type="checkbox" id="a-usar" name="usar" checked> <span id="a-usar-txt">Usar os telefones do apiário</span></label>
+      <div id="tel-proprio" class="sub" hidden>
+        <label>Telefone principal desta colmeia<input id="a-t1" name="phone1" type="tel" placeholder="(41) 99999-0001"></label>
+        <label>Telefone secundário desta colmeia<input id="a-t2" name="phone2" type="tel" placeholder="(41) 98888-0002"></label>
+      </div>
       <button>Ativar</button>
       <p class="erro" id="erro-ativar"></p>
+      <p class="msg">Dica: cadastre antes todas as colmeias do apiário em <a href="apiarios.html">Meus apiários</a>.</p>
     </form>
   </section>
 
@@ -55,35 +70,93 @@ import { $, show, sb, normalizePhone, ensureLogin, errorText, batteryPct, ago, m
 const params = new URLSearchParams(location.search);
 const deviceId = (params.get("d") || "").toUpperCase();
 $("#d-id").textContent = deviceId || "(sem código no link)";
-$("#f-ativar").code.value = params.get("c") || "";
+$("#a-code").value = params.get("c") || "";
+
+let apiarios = [], colmeias = [], ocupadas = new Set();
+const NOVO = "__novo__";
+const f = $("#f-ativar");
+
+function tel(valor, obrigatorio) {
+  const v = String(valor || "").trim();
+  if (!v) { if (obrigatorio) throw new Error("Informe o telefone principal."); return null; }
+  const n = normalizePhone(v);
+  if (!n) throw new Error("Telefone inválido. Use DDD + número, ex.: (41) 99999-0001.");
+  return n;
+}
+
+function atualizarTela() {
+  const apId = f.apiario.value;
+  const novoAp = apId === NOVO;
+  show("#novo-apiario", novoAp);
+  const natural = (x, y) => x.label.localeCompare(y.label, "pt-BR", { numeric: true });
+  const lista = novoAp ? [] : colmeias.filter((c) => c.apiary_id === apId).sort(natural);
+  const atual = f.colmeia.value;
+  f.colmeia.innerHTML = lista.map((c) => `<option value="${esc(c.id)}" ${ocupadas.has(c.id) ? "disabled" : ""}>${
+    esc(c.label)}${ocupadas.has(c.id) ? " (já tem rastreador)" : ""}</option>`).join("") +
+    `<option value="${NOVO}">+ Nova colmeia…</option>`;
+  if ([...f.colmeia.options].some((o) => o.value === atual && !o.disabled)) f.colmeia.value = atual;
+  else f.colmeia.value = ([...f.colmeia.options].find((o) => !o.disabled) || {}).value;
+  show("#nova-colmeia", f.colmeia.value === NOVO);
+  const ap = apiarios.find((a) => a.id === apId);
+  const temTel = novoAp || (ap && ap.primary_phone);
+  f.usar.disabled = !temTel;
+  if (!temTel) f.usar.checked = false;
+  $("#a-usar-txt").textContent = temTel ? "Usar os telefones do apiário" : "O apiário ainda não tem telefone: informe abaixo";
+  show("#tel-proprio", !f.usar.checked);
+}
+f.apiario.onchange = atualizarTela;
+f.colmeia.onchange = atualizarTela;
+f.usar.onchange = atualizarTela;
 
 ensureLogin($("#login"), async () => {
   show("#login", false);
   show("#passo-dados");
-  const { data } = await sb.from("colmeia_apiaries").select("name").order("name");
-  $("#apiarios").innerHTML = (data || []).map((a) => `<option value="${esc(a.name)}">`).join("");
+  const [{ data: aps }, { data: hs }, { data: devs }] = await Promise.all([
+    sb.from("colmeia_apiaries").select("id,name,city,primary_phone").order("name"),
+    sb.from("colmeia_hives").select("id,apiary_id,label"),
+    sb.from("colmeia_devices").select("id,hive_id"),
+  ]);
+  apiarios = aps || [];
+  colmeias = hs || [];
+  ocupadas = new Set((devs || []).filter((d) => d.hive_id && d.id !== deviceId).map((d) => d.hive_id));
+  f.apiario.innerHTML = apiarios.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}${a.city ? " · " + esc(a.city) : ""}</option>`).join("") +
+    `<option value="${NOVO}">+ Novo apiário…</option>`;
+  atualizarTela();
 });
 
-$("#f-ativar").onsubmit = async (ev) => {
+f.onsubmit = async (ev) => {
   ev.preventDefault();
-  const f = ev.target;
-  const p1 = normalizePhone(f.phone1.value);
-  const p2 = f.phone2.value.trim() ? normalizePhone(f.phone2.value) : null;
-  if (!p1 || (f.phone2.value.trim() && !p2)) {
-    $("#erro-ativar").textContent = "Telefone inválido. Use DDD + número, ex.: (41) 99999-0001.";
-    return;
-  }
+  const erro = (t) => { $("#erro-ativar").textContent = t; f.querySelector("button").disabled = false; };
   f.querySelector("button").disabled = true;
-  const startedAt = Date.now();
-  const { error } = await sb.rpc("colmeia_activate_device", {
-    p_device_id: deviceId, p_claim_code: f.code.value, p_apiary_name: f.apiary.value,
-    p_hive_label: f.hive.value, p_primary_phone: p1, p_secondary_phone: p2,
-  });
-  f.querySelector("button").disabled = false;
-  if (error) { $("#erro-ativar").textContent = errorText(error); return; }
-  show("#passo-dados", false);
-  show("#passo-teste");
-  waitFirstMessage(startedAt - 5 * 60 * 1000);
+  try {
+    const p1 = f.usar.checked ? null : tel(f.phone1.value, true);
+    const p2 = f.usar.checked ? null : tel(f.phone2.value, false);
+    let apId = f.apiario.value;
+    if (apId === NOVO) {
+      const { data, error } = await sb.rpc("colmeia_save_apiary", { p_id: null, p_name: f.apNome.value,
+        p_city: f.apCidade.value, p_primary_phone: tel(f.apTel1.value, f.usar.checked), p_secondary_phone: tel(f.apTel2.value, false) });
+      if (error) return erro(errorText(error));
+      apId = data;
+    }
+    let colId = f.colmeia.value;
+    if (colId === NOVO) {
+      const nome = f.colNome.value.trim();
+      if (!nome) return erro("Digite o nome da nova colmeia.");
+      const { error } = await sb.rpc("colmeia_add_hives", { p_apiary_id: apId, p_labels: [nome] });
+      if (error) return erro(errorText(error));
+      const { data } = await sb.from("colmeia_hives").select("id").eq("apiary_id", apId).eq("label", nome).single();
+      colId = data?.id;
+    }
+    const startedAt = Date.now();
+    const { error } = await sb.rpc("colmeia_activate_device_hive", { p_device_id: deviceId, p_claim_code: f.code.value,
+      p_hive_id: colId, p_primary_phone: p1, p_secondary_phone: p2 });
+    if (error) return erro(errorText(error));
+    show("#passo-dados", false);
+    show("#passo-teste");
+    waitFirstMessage(startedAt - 5 * 60 * 1000);
+  } catch (e) {
+    erro(e.message);
+  }
 };
 
 // Espera o rastreador mandar uma mensagem depois da ativação.

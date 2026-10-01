@@ -35,7 +35,7 @@ async function carregar() {
     show("#erro");
     return;
   }
-  const { apiario, devices, alertas, pesos, colheitas } = data;
+  const { apiario, devices, alertas, pesos, colheitas, colmeias } = data;
   document.title = `${apiario.name} · Bee Guard`;
   $("#lista").innerHTML = (devices.length ? devices : []).map((d) => {
     const [cls, txt] = statusDe(d, alertas);
@@ -52,7 +52,7 @@ async function carregar() {
     </article>`;
   }).join("") || '<p class="card">Nenhuma caixa com rastreador neste apiário.</p>';
   show("#lista");
-  $("#producao").innerHTML = producao([apiario], devices, colheitas, { readonly: true });
+  $("#producao").innerHTML = producao([apiario], devices, colheitas, { readonly: true, hives: colmeias || [] });
   show("#producao");
   show("#rodape");
 }

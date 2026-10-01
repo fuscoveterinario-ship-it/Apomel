@@ -69,3 +69,28 @@ button.mini { width: auto; padding: 6px 12px; margin: 0; font-size: 14px; flex: 
 .producao summary { cursor: pointer; font-weight: 700; padding: 12px 0 4px; }
 .rodape { font-size: 14px; text-align: center; }
 .sem-balanca { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; font-size: 15px; }
+.apiario h2 small, .grupo h2 small { display: block; font-size: 15px; font-weight: 400; color: var(--muted); margin-top: 4px; }
+.apiario h3 { margin: 18px 0 8px; font-size: 16px; }
+.colmeias { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.colmeias li { display: flex; align-items: center; justify-content: space-between; gap: 6px; border: 1px solid var(--line);
+  border-radius: 10px; padding: 6px 6px 6px 10px; min-width: 0; flex-wrap: wrap; }
+.colmeias li.tem { border-color: var(--mel); background: color-mix(in srgb, var(--mel) 14%, transparent); }
+.colmeias li small { color: var(--muted); font-size: 12px; width: 100%; }
+.colmeias li button.mini { padding: 2px 10px; }
+.legenda-col { font-size: 13px; margin: 6px 0 0; }
+.faixa { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; }
+.faixa label { margin: 6px 0; }
+.apiario details summary, .grupo details summary { cursor: pointer; font-weight: 700; padding: 12px 0 4px; }
+.sub { border-left: 3px solid var(--mel); padding-left: 12px; margin: 4px 0 8px; }
+label.check { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+label.check input { width: auto; margin: 0; }
+.barra { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 0 0 16px; }
+.barra .btn { width: auto; margin: 0; padding: 10px 14px; font-size: 15px; }
+.alternar { display: flex; align-items: center; gap: 6px; }
+.alternar span { color: var(--muted); font-size: 15px; }
+.alternar button { width: auto; margin: 0; padding: 8px 14px; font-size: 15px; background: transparent; color: var(--ink); border: 2px solid var(--line); }
+.alternar button.ativo { background: var(--mel); border-color: var(--mel); color: #221a08; }
+.grupo { border-width: 2px; }
+.grupo h2 .status { vertical-align: middle; }
+.grupo-alerta { border-color: var(--alerta); background: color-mix(in srgb, var(--alerta) 6%, var(--card)); }
+.bloco-apiario { margin-bottom: 28px; }

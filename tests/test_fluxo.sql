@@ -284,4 +284,58 @@ exception when sqlstate 'P0002' then raise notice 'ok: outro usuário não pega 
 end $$;
 reset role;
 
+-- 14) Apiários e colmeias: cadastro, ativação por colmeia, ataque ao apiário.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select public.colmeia_save_apiary((select id from public.colmeia_apiaries where name = 'Sítio Santa Rita'),
+  'Sítio Santa Rita', 'Bocaiúva do Sul', '+5541999990001', '+5541999990002') as apiario \gset
+select pg_temp.check(public.colmeia_add_hives(:'apiario', array['Caixa 13', 'Caixa 14', 'Caixa 12']) = 2,
+  'cadastra colmeias sem repetir (Caixa 12 já existia pela ativação)');
+reset role;
+select public.colmeia_provision_device('CS-0002', 'segredo-2', 'EFGH-2345');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select public.colmeia_activate_device_hive('CS-0002', 'efgh-2345',
+  (select id from public.colmeia_hives where label = 'Caixa 13'));
+select pg_temp.check((select primary_phone = '+5541999990001' and secondary_phone = '+5541999990002'
+                             and phones_from_apiary and hive_label = 'Caixa 13'
+                      from public.colmeia_devices where id = 'CS-0002'), 'ativação por colmeia usa os telefones do apiário');
+do $$ begin
+  perform public.colmeia_activate_device_hive('CS-0002', 'efgh-2345', (select id from public.colmeia_hives where label = 'Caixa 12'));
+  raise exception 'FALHOU: duas caixas com o mesmo rastreador';
+exception when sqlstate '22023' then raise notice 'ok: colmeia com rastreador não recebe outro';
+end $$;
+select public.colmeia_save_apiary(:'apiario', 'Sítio Santa Rita', 'Bocaiúva do Sul', '+5541999990003', null);
+reset role;
+select pg_temp.check((select primary_phone from public.colmeia_devices where id = 'CS-0002') = '+5541999990003',
+  'telefone do apiário atualiza o rastreador');
+select pg_temp.check((select primary_phone from public.colmeia_devices where id = 'CS-0001') = '+5541999990001',
+  'rastreador com telefone próprio não muda');
+
+-- Caixa 12 já está com alerta aberto; a Caixa 13 é mexida em seguida: ataque ao apiário.
+update public.colmeia_devices set maintenance_until = null;
+select public.colmeia_ingest_event('CS-0002', 1, 'movimento');
+select pg_temp.check((select bool_and(status = 'escalado') and count(*) = 2 from public.colmeia_alerts
+                      where kind = 'movimento' and status in ('pendente', 'escalado')), 'ataque escala as duas caixas');
+select pg_temp.check((select bool_and(mode = 'roubo') from public.colmeia_devices where id in ('CS-0001', 'CS-0002')),
+  'ataque liga o rastreamento intensivo');
+select pg_temp.check((select count(*) from public.colmeia_notifications where template = 'ataque_apiario') = 2,
+  'uma mensagem de ataque (WhatsApp + SMS) para o telefone do apiário');
+select pg_temp.check((select body from public.colmeia_notifications where template = 'ataque_apiario' and channel = 'sms')
+                     like '%ATAQUE AO APIÁRIO Sítio Santa Rita. Caixa 12, Caixa 13 foram movimentadas%', 'texto do ataque');
+select pg_temp.check((select count(*) from public.colmeia_notifications
+                      where device_id = 'CS-0002' and template = 'alerta_movimento') = 0, 'sem pergunta "foi você?" no ataque');
+
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select pg_temp.check(public.colmeia_end_apiary_alarm(:'apiario') = 2, 'falso alarme encerra o apiário todo');
+select pg_temp.check(public.colmeia_set_apiary_maintenance(:'apiario', 120) is not null, 'manutenção do apiário todo');
+select pg_temp.check(public.colmeia_add_harvest(:'apiario', '', current_date, 7.5, null,
+  (select id from public.colmeia_hives where label = 'Caixa 14')) > 0, 'colheita de colmeia sem rastreador');
+reset role;
+select pg_temp.check((select bool_and(mode = 'normal' and maintenance_until > now()) from public.colmeia_devices
+                      where id in ('CS-0001', 'CS-0002')), 'caixas voltam ao normal e ficam em manutenção');
+select pg_temp.check((select h.label from public.colmeia_harvests hv join public.colmeia_hives h on h.id = hv.hive_id
+                      where hv.source = 'balanca') = 'Caixa 12', 'colheita da balança fica na colmeia do rastreador');
+
 \echo 'TODOS OS TESTES PASSARAM'

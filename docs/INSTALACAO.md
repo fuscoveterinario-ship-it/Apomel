@@ -81,6 +81,7 @@ parâmetros **na ordem indicada**:
 | `colheita` | caixa, apiário, kg, link | BEE GUARD: a {{1}} ({{2}}) ganhou {{3}} kg desde que a melgueira foi colocada. Pode estar na hora da colheita. Veja: {{4}} |
 | `peso_baixo` | caixa, apiário, kg, link | AVISO: a {{1}} ({{2}}) está com {{3}} kg, abaixo do limite. Pode faltar alimento. Veja: {{4}} |
 | `enxame` | caixa, apiário, kg, hora, link | AVISO: a {{1}} ({{2}}) perdeu {{3}} kg de repente perto das {{4}}. Pode ter enxameado. Veja: {{5}} |
+| `ataque_apiario` | apiário, caixas, link | ALERTA BEE GUARD: ATAQUE AO APIÁRIO {{1}}. {{2}} foram movimentadas ao mesmo tempo. POSSÍVEL ROUBO. Todos os contatos foram avisados e o rastreamento intensivo foi ativado. Veja: {{3}} |
 
 **Envio a cada minuto** (para o escalonamento de 5 min sair na hora certa). No SQL Editor:
 ```sql

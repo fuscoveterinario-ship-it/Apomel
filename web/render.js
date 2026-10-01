@@ -46,20 +46,20 @@ export function graficoMeses(hs) {
     }).join("")}</svg><p class="msg legenda">kg de mel colhidos por mês</p>`;
 }
 
-export function producao(apiarios, devs, hs, { abertos = new Set(), readonly = false } = {}) {
+export function producao(apiarios, devs, hs, { abertos = new Set(), readonly = false, hives = [] } = {}) {
   const ano = new Date().getFullYear();
   const nomeCaixa = Object.fromEntries(devs.map((d) => [d.id, d.hive_label || d.id]));
+  const nomeColmeia = Object.fromEntries(hives.map((h) => [h.id, h.label]));
+  const SEM = "Apiário (sem colmeia definida)";
+  const onde = (h) => (h.hive_id && nomeColmeia[h.hive_id]) || (h.device_id && nomeCaixa[h.device_id]) || SEM;
   const hoje = new Date().toLocaleDateString("sv-SE");  // AAAA-MM-DD no fuso do aparelho
   return apiarios.map((a) => {
     const lista = hs.filter((h) => h.apiary_id === a.id);
     const doAno = lista.filter((h) => h.harvested_on.startsWith(String(ano)));
     const total = doAno.reduce((t, h) => t + Number(h.kg), 0);
     const porCaixa = {};
-    for (const h of doAno) {
-      const k = h.device_id ? nomeCaixa[h.device_id] || h.device_id : "Apiário / caixas sem rastreador";
-      porCaixa[k] = (porCaixa[k] || 0) + Number(h.kg);
-    }
-    const caixas = devs.filter((d) => d.apiary_id === a.id);
+    for (const h of doAno) porCaixa[onde(h)] = (porCaixa[onde(h)] || 0) + Number(h.kg);
+    const colmeias = hives.filter((h) => h.apiary_id === a.id);
     const aid = esc(a.id);
     return `<article class="card producao">
       <h2>Produção de mel <small>${esc(a.name)}</small></h2>
@@ -68,17 +68,17 @@ export function producao(apiarios, devs, hs, { abertos = new Set(), readonly = f
         <div><span>Colheitas em ${ano}</span><b>${doAno.length}</b></div>
       </div>
       ${lista.length ? graficoMeses(lista) : '<p class="msg">Nenhuma colheita registrada ainda.</p>'}
-      ${Object.keys(porCaixa).length ? `<h3>Por caixa em ${ano}</h3><ul class="prod-caixas">${Object.entries(porCaixa)
+      ${Object.keys(porCaixa).length ? `<h3>Por colmeia em ${ano}</h3><ul class="prod-caixas">${Object.entries(porCaixa)
         .sort((x, y) => y[1] - x[1]).map(([k, v]) => `<li><span>${esc(k)}</span><b>${fmtKg(v)}</b></li>`).join("")}</ul>` : ""}
       ${lista.length ? `<h3>Últimas colheitas</h3><ul class="prod-lista">${lista.slice(0, 8).map((h) => `<li>
           <div><b>${fmtKg(h.kg)}</b> · ${esc(new Date(h.harvested_on + "T12:00:00").toLocaleDateString("pt-BR"))}<br>
-            <small>${esc(h.device_id ? nomeCaixa[h.device_id] || h.device_id : "Apiário / caixas sem rastreador")}${
+            <small>${esc(onde(h))}${
               h.source === "balanca" ? " · estimado pela balança" : ""}${h.note ? " · " + esc(h.note) : ""}</small></div>
           ${readonly ? "" : `<button class="mini secundario" data-delcol="${esc(h.id)}">Apagar</button>`}</li>`).join("")}</ul>` : ""}
       ${readonly ? "" : `<details data-bal="prod-${aid}" ${abertos.has("prod-" + a.id) ? "open" : ""}>
         <summary>Registrar colheita</summary>
-        <label>Caixa<select id="col-cx-${aid}"><option value="">Apiário todo / caixa sem rastreador</option>${
-          caixas.map((d) => `<option value="${esc(d.id)}">${esc(d.hive_label || d.id)}</option>`).join("")}</select></label>
+        <label>Colmeia<select id="col-cx-${aid}"><option value="">Apiário todo (sem colmeia definida)</option>${
+          colmeias.map((h) => `<option value="${esc(h.id)}">${esc(h.label)}</option>`).join("")}</select></label>
         <label>Data da colheita<input type="date" id="col-dt-${aid}" value="${hoje}"></label>
         <label>Mel colhido (kg)<input type="number" id="col-kg-${aid}" min="0.1" step="0.1" inputmode="decimal"></label>
         <label>Observação (opcional)<input id="col-obs-${aid}" maxlength="200" placeholder="Ex.: florada de eucalipto"></label>
