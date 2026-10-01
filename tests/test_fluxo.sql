@@ -263,6 +263,12 @@ select pg_temp.check((select jsonb_array_length(v->'devices') = 1 and jsonb_arra
                       and v::text not like '%last_lat%' and v::text not like '%phone%'
                       from (select public.colmeia_shared_view(:'tok') v) x),
   'visualização sem login mostra caixa e colheitas, sem localização nem telefone');
+reset role;
+update public.colmeia_apiaries set keeper_name = 'Apicultor Exemplo'
+where id = (select apiary_id from public.colmeia_share_links where token = :'tok');
+set role anon;
+select pg_temp.check((select public.colmeia_shared_view(:'tok')->'apiario'->>'apicultor') = 'Apicultor Exemplo',
+  'link mostra o nome do apicultor');
 do $$ begin
   perform public.colmeia_shared_view('token-falso');
   raise exception 'FALHOU: aceitou link falso';

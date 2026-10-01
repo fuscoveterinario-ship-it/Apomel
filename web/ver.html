@@ -14,6 +14,7 @@
 <main>
   <section class="card" id="carregando"><p>Carregando…</p></section>
   <p class="erro card" id="erro" hidden></p>
+  <section class="card topo" id="topo" hidden></section>
   <section id="lista" hidden></section>
   <section id="producao" hidden></section>
   <p class="msg rodape" id="rodape" hidden>Somente visualização. A localização das caixas não aparece neste link.
@@ -37,6 +38,15 @@ async function carregar() {
   }
   const { apiario, devices, alertas, pesos, colheitas, colmeias } = data;
   document.title = `${apiario.name} · Bee Guard`;
+  const emAlerta = devices.filter((d) => statusDe(d, alertas)[0] === "alerta").length;
+  $("#topo").innerHTML = `<h1>${esc(apiario.name)}</h1>
+    <p class="sub">${apiario.apicultor ? `Apicultor: <b>${esc(apiario.apicultor)}</b>` : ""}${apiario.apicultor && apiario.city ? " · " : ""}${esc(apiario.city || "")}</p>
+    <div class="grid">
+      <div><span>Colmeias</span><b>${(colmeias || []).length}</b></div>
+      <div><span>Com rastreador</span><b>${devices.length}</b></div>
+      <div><span>Em alerta</span><b>${emAlerta}</b></div>
+    </div>`;
+  show("#topo");
   $("#lista").innerHTML = (devices.length ? devices : []).map((d) => {
     const [cls, txt] = statusDe(d, alertas);
     const pct = batteryPct(d.last_battery_mv);
