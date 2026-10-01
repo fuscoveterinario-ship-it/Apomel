@@ -156,8 +156,11 @@ async function start() {
   if (navigator.geolocation) {
     navigator.geolocation.watchPosition(
       (p) => {
+        const primeira = !state.pos;
         state.pos = { lat: p.coords.latitude, lon: p.coords.longitude };
         $("#p-gps").textContent = `±${Math.round(p.coords.accuracy)} m`;
+        // A primeira posição costuma chegar depois do "online": manda logo, sem esperar 10 min.
+        if (primeira) send("posicao");
       },
       (e) => { $("#p-gps").textContent = "sem permissão"; log(`GPS: ${e.message}`); },
       { enableHighAccuracy: true, maximumAge: 10000 },
