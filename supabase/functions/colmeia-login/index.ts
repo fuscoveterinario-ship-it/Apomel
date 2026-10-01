@@ -69,6 +69,8 @@ Deno.serve(async (req) => {
   });
   if (!res.ok) {
     console.error("resend", res.status, (await res.text()).slice(0, 300));
+    // Domínio ainda em verificação ou chave sem permissão: o site usa o e-mail padrão.
+    if (res.status === 401 || res.status === 403 || res.status === 422) return reply({ ok: false, fallback: true });
     return reply({ ok: false, error: "Não foi possível enviar o e-mail agora. Tente de novo em alguns minutos." }, 502);
   }
   return reply({ ok: true });
