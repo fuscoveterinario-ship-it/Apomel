@@ -14,5 +14,7 @@ test("e-mail traz o código em português e só dígitos", () => {
   assert.match(m.text, /código de acesso ao Bee Guard é: 123456/);
   assert.match(m.html, /123456/);
   assert.match(m.html, /https:\/\/beeguard\.com\.br\/icone\.png/);
+  assert.match(m.html, /wa\.me\/5541996767045/);
+  assert.match(m.text, /\(41\) 99676-7045/);
   assert.doesNotMatch(loginEmail("12<b>34", "x").html, /<b>34/);
 });

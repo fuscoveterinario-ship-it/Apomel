@@ -8,12 +8,17 @@ export function normalizeEmail(raw: unknown): string | null {
   return email.length <= 254 && EMAIL_RE.test(email) ? email : null;
 }
 
+// Contato de suporte mostrado no e-mail.
+export const SUPPORT_PHONE = "(41) 99676-7045";
+export const SUPPORT_WHATSAPP = "https://wa.me/5541996767045";
+
 export function loginEmail(code: string, siteUrl: string) {
   const safe = code.replace(/\D/g, "");
   const subject = `${safe} é o seu código de acesso Bee Guard`;
   const text = `Seu código de acesso ao Bee Guard é: ${safe}\n\n` +
     `Digite esse número na tela de entrada do site. Ele vale por pouco tempo e pode ser usado uma vez.\n` +
-    `Se não foi você que pediu, ignore este e-mail.\n\n${siteUrl}`;
+    `Se não foi você que pediu, ignore este e-mail.\n\n` +
+    `Dúvidas? Fale com o suporte Bee Guard pelo WhatsApp ${SUPPORT_PHONE}: ${SUPPORT_WHATSAPP}\n\n${siteUrl}`;
   const html = `<!doctype html><html lang="pt-BR"><body style="margin:0;background:#f4f4f4;font-family:Arial,Helvetica,sans-serif;color:#1d1d1d">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:12px;overflow:hidden">
@@ -26,6 +31,10 @@ export function loginEmail(code: string, siteUrl: string) {
 <p style="font-size:36px;font-weight:bold;letter-spacing:8px;margin:0 0 16px;color:#111111">${safe}</p>
 <p style="font-size:15px;line-height:1.5;margin:0 0 12px">Digite esse número na tela de entrada do Bee Guard. Ele vale por pouco tempo e pode ser usado uma vez.</p>
 <p style="font-size:13px;line-height:1.5;color:#666666;margin:0">Se não foi você que pediu, ignore este e-mail.</p>
+</td></tr>
+<tr><td style="padding:14px 20px;border-top:1px solid #eeeeee;font-size:14px;line-height:1.5;color:#444444">
+Dúvidas? Fale com o suporte Bee Guard pelo WhatsApp:
+<a href="${SUPPORT_WHATSAPP}" style="color:#111111;font-weight:bold">${SUPPORT_PHONE}</a>
 </td></tr></table></td></tr></table></body></html>`;
   return { subject, text, html };
 }
