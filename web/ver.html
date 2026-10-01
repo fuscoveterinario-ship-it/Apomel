@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apiário Bee Guard</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="icone.png">
+<link rel="apple-touch-icon" href="icone.png">
+<meta name="theme-color" content="#111111">
+</head>
+<body>
+<header><a class="marca" href="index.html"><img src="icone.png" alt="" width="40" height="40"><span>BEEGUARD<small>Visualização do apiário</small></span></a></header>
+<main>
+  <section class="card" id="carregando"><p>Carregando…</p></section>
+  <p class="erro card" id="erro" hidden></p>
+  <section id="lista" hidden></section>
+  <section id="producao" hidden></section>
+  <p class="msg rodape" id="rodape" hidden>Somente visualização. A localização das caixas não aparece neste link.
+    A página atualiza sozinha a cada minuto.</p>
+</main>
+
+<script type="module">
+import { $, show, sb, ago, batteryPct, errorText, esc } from "./app.js";
+import { balanca, producao, statusDe } from "./render.js";
+
+const token = new URLSearchParams(location.search).get("t") || "";
+
+async function carregar() {
+  const { data, error } = await sb.rpc("colmeia_shared_view", { p_token: token });
+  show("#carregando", false);
+  if (error) {
+    $("#erro").textContent = /inválido|expirado/i.test(error.message)
+      ? "Este link não vale mais. Peça um link novo ao dono do apiário." : errorText(error);
+    show("#erro");
+    return;
+  }
+  const { apiario, devices, alertas, pesos, colheitas } = data;
+  document.title = `${apiario.name} · Bee Guard`;
+  $("#lista").innerHTML = (devices.length ? devices : []).map((d) => {
+    const [cls, txt] = statusDe(d, alertas);
+    const pct = batteryPct(d.last_battery_mv);
+    return `<article class="card">
+      <h2>${esc(d.hive_label || d.id)} <span class="status ${cls}">${esc(txt)}</span></h2>
+      <div class="grid">
+        <div><span>Apiário</span><b>${esc(apiario.name)}</b></div>
+        <div><span>Rastreador</span><b>${esc(d.id)}</b></div>
+        <div><span>Última mensagem</span><b>${ago(d.last_seen_at)}</b></div>
+        <div><span>Bateria</span><b>${pct === null ? "—" : pct + "%"}</b></div>
+      </div>
+      ${balanca(d, pesos.filter((p) => p.device_id === d.id), { readonly: true })}
+    </article>`;
+  }).join("") || '<p class="card">Nenhuma caixa com rastreador neste apiário.</p>';
+  show("#lista");
+  $("#producao").innerHTML = producao([apiario], devices, colheitas, { readonly: true });
+  show("#producao");
+  show("#rodape");
+}
+
+if (!token) {
+  show("#carregando", false);
+  $("#erro").textContent = "Link incompleto. Abra o link exatamente como foi enviado.";
+  show("#erro");
+} else {
+  carregar();
+  setInterval(carregar, 60000);
+}
+</script>
+</body>
+</html>

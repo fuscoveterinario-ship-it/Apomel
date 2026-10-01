@@ -243,4 +243,45 @@ select pg_temp.check((select harvest_base_kg is null from public.colmeia_devices
 select public.colmeia_check_weight_alerts('CS-0001');
 select pg_temp.check((select count(*) from public.colmeia_harvests where source = 'balanca') = 1, 'colheita pela balança não duplica');
 
+-- 12) Link de visualização: sem login, sem localização, só do apiário do dono.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select public.colmeia_create_share_link((select id from public.colmeia_apiaries limit 1)) as tok \gset
+select pg_temp.check(:'tok' = public.colmeia_create_share_link((select id from public.colmeia_apiaries limit 1)),
+  'link reaproveitado');
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+do $$ begin
+  perform public.colmeia_create_share_link((select id from public.colmeia_apiaries limit 1));
+  raise exception 'FALHOU: outro usuário gerou link';
+exception when sqlstate 'P0002' then raise notice 'ok: só o dono gera link';
+end $$;
+reset role;
+set role anon;
+select pg_temp.check((select jsonb_array_length(v->'devices') = 1 and jsonb_array_length(v->'colheitas') > 0
+                      and v::text not like '%last_lat%' and v::text not like '%phone%'
+                      from (select public.colmeia_shared_view(:'tok') v) x),
+  'visualização sem login mostra caixa e colheitas, sem localização nem telefone');
+do $$ begin
+  perform public.colmeia_shared_view('token-falso');
+  raise exception 'FALHOU: aceitou link falso';
+exception when sqlstate 'P0002' then raise notice 'ok: link falso recusado';
+end $$;
+reset role;
+
+-- 13) Dono abre o mapa do alerta pelo painel; outro usuário não.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select pg_temp.check(length(public.colmeia_open_alert_token('CS-0001')) = 32, 'dono pega o link do alerta aberto');
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+do $$ begin
+  perform public.colmeia_open_alert_token('CS-0001');
+  raise exception 'FALHOU: outro usuário pegou o link do alerta';
+exception when sqlstate 'P0002' then raise notice 'ok: outro usuário não pega o link do alerta';
+end $$;
+reset role;
+
 \echo 'TODOS OS TESTES PASSARAM'

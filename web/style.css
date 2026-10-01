@@ -67,3 +67,5 @@ code { background: var(--bg); padding: 2px 6px; border-radius: 6px; }
 .prod-lista small { color: var(--muted); }
 button.mini { width: auto; padding: 6px 12px; margin: 0; font-size: 14px; flex: none; }
 .producao summary { cursor: pointer; font-weight: 700; padding: 12px 0 4px; }
+.rodape { font-size: 14px; text-align: center; }
+.sem-balanca { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; font-size: 15px; }

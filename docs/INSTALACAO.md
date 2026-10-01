@@ -226,3 +226,12 @@ configurado, o site usa o e-mail padrão do Supabase (link "Sign in").
    Opcional: `LOGIN_EMAIL_FROM` (padrão `Bee Guard <acesso@beeguard.com.br>`).
 
 Limites: 3 códigos por e-mail a cada 15 minutos e 200 por hora no total.
+
+## 11. Produção de mel e link de visualização
+
+- **Produção de mel:** no painel, cada apiário tem o quadro *Produção de mel* (total do ano,
+  por caixa, gráfico por mês). As colheitas entram pelo formulário *Registrar colheita* ou
+  sozinhas pela balança quando as melgueiras são retiradas.
+- **Link de visualização:** o botão *Gerar link para compartilhar* cria um endereço
+  `https://beeguard.com.br/ver.html?t=...` que mostra o apiário sem login e sem poder mudar nada.
+  **Não mostra a localização das caixas nem telefones.** Vale 90 dias.
