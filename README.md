@@ -18,9 +18,9 @@ o contato secundário é avisado e o rastreador entra em **modo roubo** (posiç�
 
 | Pasta | O que tem |
 |---|---|
-| `firmware/` | Programa da placa (PlatformIO), para **T-SIM7080G-S3** (protótipo, Cat-M/NB-IoT) e **T-A7670SA** (produção, 4G + 2G): sono profundo, acorda com movimento, confirma se não foi só uma batida, GPS, envio HTTPS assinado, SMS de emergência, modo roubo. |
+| `firmware/` | Programa da placa (PlatformIO), para **T-SIM7080G-S3** (protótipo, Cat-M/NB-IoT) e **T-A7670SA** (produção, 4G + 2G): sono profundo, acorda com movimento, confirma se não foi só uma batida, GPS, envio HTTPS assinado, SMS de emergência, modo roubo e balança opcional (HX711). |
 | `supabase/` | Banco de dados (tabelas, regras de acesso, alerta e escalonamento em 5 min) e as funções `colmeia-ingest` (recebe o rastreador) e `colmeia-dispatch` (envia WhatsApp/SMS). |
-| `web/` | Telas: `ativar.html` (QR Code), `alerta.html` (Sou eu / Possível roubo / mapa), `painel.html` (meus rastreadores), `celular-teste.html` (celular como rastreador de teste). |
+| `web/` | Telas: `ativar.html` (QR Code), `alerta.html` (Sou eu / Possível roubo / mapa), `painel.html` (meus rastreadores, peso e calibração da balança), `celular-teste.html` (celular como rastreador de teste). |
 | `tools/` | `novo-rastreador.mjs` (gera segredo, código de ativação e link do QR Code) e `simulador.mjs` (finge ser a placa). |
 | `tests/` | Testes do banco (fluxo completo de roubo) e do protocolo. |
 | `docs/` | Guia de instalação e desenho de ligação da placa. |
@@ -34,6 +34,7 @@ o contato secundário é avisado e o rastreador entra em **modo roubo** (posiç�
 | 5 min sem resposta | Avisa o secundário e o principal; rastreador entra em modo roubo. |
 | Rastreador em silêncio | Sem mensagem além do esperado (ex.: destruído): aviso "sem comunicação". |
 | Bateria baixa | Um aviso por dia. |
+| Balança (colmeia sentinela) | Aviso de colheita (ganho de peso desde a melgueira), de falta de alimento e de possível enxameação. |
 
 Sem internet no apiário, a placa manda **SMS direto** para os telefones cadastrados e guarda o
 evento para reenviar. O mesmo caminho por SMS servirá para a conexão via satélite (Starlink

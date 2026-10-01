@@ -42,3 +42,9 @@ extern HardwareSerial Serial, Serial1;
 void pinMode(int, int); void digitalWrite(int, int); void delay(unsigned long);
 unsigned long millis(); uint32_t analogReadMilliVolts(int);
 size_t strlcpy(char*, const char*, size_t);
+#define INPUT_PULLUP 5
+int digitalRead(int); void delayMicroseconds(unsigned);
+typedef int portMUX_TYPE;
+#define portMUX_INITIALIZER_UNLOCKED 0
+inline void portENTER_CRITICAL(portMUX_TYPE*) {}
+inline void portEXIT_CRITICAL(portMUX_TYPE*) {}

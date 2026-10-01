@@ -36,3 +36,12 @@ button:disabled { opacity: .5; }
 .passos { color: var(--muted); font-size: 15px; }
 .passos b { color: var(--ink); }
 code { background: var(--bg); padding: 2px 6px; border-radius: 6px; }
+.balanca { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.balanca h3 { margin: 0 0 8px; font-size: 17px; }
+.balanca h4 { margin: 16px 0 4px; font-size: 16px; }
+.balanca summary { cursor: pointer; font-weight: 700; padding: 10px 0; }
+.balanca ol { padding-left: 20px; }
+.peso-graf { width: 100%; height: 70px; margin-top: 10px; display: block; }
+.peso-graf polyline { fill: none; stroke: var(--mel); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.peso-eixo { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+.aviso-txt { color: var(--aviso); font-weight: 600; }

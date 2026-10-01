@@ -4,12 +4,14 @@
 //   node tools/simulador.mjs <evento> [lat lon]
 //   eventos: online | vida | movimento | posicao | bateria_baixa
 // Variáveis: API_URL, DEVICE_ID, DEVICE_SECRET (as mesmas do config.h)
+// Balança (opcional): PESO_BRUTO=500000 manda uma pesagem com esse valor bruto do HX711
+//   (no "movimento" vai como peso na hora do alerta).
 import { createHmac } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const { API_URL, DEVICE_ID, DEVICE_SECRET } = process.env;
+const { API_URL, DEVICE_ID, DEVICE_SECRET, PESO_BRUTO } = process.env;
 const [type = "vida", lat = "-25.4284", lon = "-49.2733"] = process.argv.slice(2);
 if (!API_URL || !DEVICE_ID || !DEVICE_SECRET) {
   console.error("Defina API_URL, DEVICE_ID e DEVICE_SECRET. Ex.:\n" +
@@ -27,9 +29,12 @@ seq = Math.max(seq + 1, Math.floor(Date.now() / 1000));
 mkdirSync(dir, { recursive: true });
 writeFileSync(file, String(seq));
 
-const body = JSON.stringify({
-  events: [{ seq, t: type, lat: Number(lat), lon: Number(lon), bat: 4050, sig: 20, ch: "teste" }],
-});
+const event = { seq, t: type, lat: Number(lat), lon: Number(lon), bat: 4050, sig: 20, ch: "teste" };
+if (PESO_BRUTO) {
+  if (type === "movimento") event.w = Math.round(Number(PESO_BRUTO));
+  else event.ws = [[0, Math.round(Number(PESO_BRUTO))]];
+}
+const body = JSON.stringify({ events: [event] });
 const signature = createHmac("sha256", DEVICE_SECRET).update(body).digest("hex");
 
 const res = await fetch(API_URL, {

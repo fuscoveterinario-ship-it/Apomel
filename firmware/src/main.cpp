@@ -15,6 +15,8 @@
 //    local" e manda SMS com a posição a cada 5 min até a internet voltar.
 //  - Enquanto houver alerta aberto ou modo roubo, fica acordado enviando posição;
 //    se a caixa ficar parada 30 min, passa a acordar a cada 30 min.
+//  - Colmeia sentinela (SCALE_ENABLED 1): pesa a cada 3 h sem ligar o modem e manda
+//    as pesagens junto com a mensagem do dia (aviso de colheita, fome e enxame).
 //  - Wi-Fi e Bluetooth ficam desligados.
 
 #include <Arduino.h>
@@ -33,6 +35,7 @@
 #include "board.h"
 #include "config.h"
 #include "adxl345.h"
+#include "hx711.h"
 
 #ifdef HAS_PMU
 #define XPOWERS_CHIP_AXP2101
@@ -51,10 +54,16 @@ TinyGsm modem(debugger);
 TinyGsm modem(SerialAT);
 #endif
 
-#define FW_VERSION "0.3.0"
+#define FW_VERSION "0.4.0"
 
 #ifndef DEFAULT_THEFT_SMS_INTERVAL_S
 #define DEFAULT_THEFT_SMS_INTERVAL_S 300
+#endif
+#ifndef SCALE_ENABLED
+#define SCALE_ENABLED 0
+#endif
+#ifndef SCALE_INTERVAL_MIN
+#define SCALE_INTERVAL_MIN 180
 #endif
 
 // ---------------------------------------------------------------------------
@@ -66,12 +75,21 @@ struct QueuedEvent {
   float lat, lon;
   int16_t batteryMv;
   time_t at;
+  bool hasWeight;  // movimento: peso na hora (perto de zero = caixa tirada da balança)
+  int32_t weightRaw;
 };
 
-constexpr uint32_t STATE_MAGIC = 0xC0151E6B;  // muda quando a estrutura abaixo muda
+// Pesagem guardada até a próxima mensagem (valor bruto; a plataforma converte em kg).
+struct WeightReading {
+  time_t at;
+  int32_t raw;
+};
+
+constexpr uint32_t STATE_MAGIC = 0xC0151E6C;  // muda quando a estrutura abaixo muda
 constexpr uint32_t STILL_SLEEP_S = 30 * 60;   // roubo com a caixa parada: acorda a cada 30 min
 constexpr int LOW_BATTERY_MV = 3300;
 constexpr int QUEUE_SIZE = 10;
+constexpr int WEIGHT_SLOTS = 24;  // 3 dias de pesagens a cada 3 h, se ficar sem internet
 
 struct State {
   uint32_t magic;
@@ -91,12 +109,16 @@ struct State {
   Accel ref;  // posição de repouso da caixa (direção da gravidade)
   uint8_t qlen;
   QueuedEvent queue[QUEUE_SIZE];
+  time_t nextWeigh;
+  uint8_t wlen;
+  WeightReading weights[WEIGHT_SLOTS];
 };
 RTC_DATA_ATTR State st;
 
 Preferences prefs;
 ADXL345 accel;
 bool accelOk = false;
+HX711 scale;
 bool modemReady = false;
 bool netReady = false;
 bool gpsOn = false;
@@ -136,7 +158,7 @@ uint32_t nextSeq() {
   return seq;
 }
 
-void enqueue(const char* type, bool withPosition) {
+void enqueue(const char* type, bool withPosition, const int32_t* weightRaw = nullptr) {
   if (st.qlen == QUEUE_SIZE) {
     // Fila cheia: descarta o evento mais antigo que não seja de movimento.
     int drop = 0;
@@ -153,7 +175,35 @@ void enqueue(const char* type, bool withPosition) {
   e.lon = (withPosition && st.hasFix) ? st.lastLon : 0;
   e.batteryMv = batteryMv();
   e.at = now_s();
+  e.hasWeight = weightRaw != nullptr;
+  e.weightRaw = weightRaw ? *weightRaw : 0;
   trace("evento %s seq=%u", type, e.seq);
+}
+
+// ---------------------------------------------------------------------------
+// Balança (HX711): liga, lê e desliga em ~2 s
+// ---------------------------------------------------------------------------
+bool weighNow(int32_t& raw, int samples) {
+  if (!SCALE_ENABLED) return false;
+  scale.begin(SCALE_DOUT_PIN, SCALE_SCK_PIN);
+  bool ok = scale.readMedian(raw, samples);
+  scale.powerDown();
+  if (!ok) trace("balança não respondeu (confira os fios: DOUT=%d, SCK=%d)", SCALE_DOUT_PIN, SCALE_SCK_PIN);
+  return ok;
+}
+
+// Pesa e guarda para mandar na próxima mensagem.
+void recordWeight() {
+  if (!SCALE_ENABLED) return;
+  st.nextWeigh = now_s() + (time_t)SCALE_INTERVAL_MIN * 60;
+  int32_t raw;
+  if (!weighNow(raw, 15)) return;
+  if (st.wlen == WEIGHT_SLOTS) {  // cheio: descarta a mais antiga
+    memmove(&st.weights[0], &st.weights[1], (WEIGHT_SLOTS - 1) * sizeof(WeightReading));
+    st.wlen--;
+  }
+  st.weights[st.wlen++] = {now_s(), raw};
+  trace("balança: %ld (%u pesagem(ns) guardada(s))", (long)raw, st.wlen);
 }
 
 // ---------------------------------------------------------------------------
@@ -393,19 +443,43 @@ String hmacHex(const String& msg) {
   return String(hex);
 }
 
-String buildBody() {
+// As pesagens guardadas vão no último evento: "ws":[[segundos atrás, valor], ...].
+String buildBody(uint8_t& weightsSent) {
   String body = "{\"events\":[";
-  char item[200];
+  char item[220];
+  time_t now = now_s();
+  weightsSent = 0;
   for (int i = 0; i < st.qlen; i++) {
     const QueuedEvent& e = st.queue[i];
     snprintf(item, sizeof(item),
-             "%s{\"seq\":%u,\"t\":\"%s\",\"lat\":%.6f,\"lon\":%.6f,\"bat\":%d,\"sig\":%d,\"age\":%ld,\"fw\":\"%s\"}",
+             "%s{\"seq\":%u,\"t\":\"%s\",\"lat\":%.6f,\"lon\":%.6f,\"bat\":%d,\"sig\":%d,\"age\":%ld,\"fw\":\"%s\"",
              i ? "," : "", e.seq, e.type, e.lat, e.lon, e.batteryMv, signalQuality,
-             (long)(now_s() - e.at), FW_VERSION);
+             (long)(now - e.at), FW_VERSION);
     body += item;
+    if (e.hasWeight) {
+      snprintf(item, sizeof(item), ",\"w\":%ld", (long)e.weightRaw);
+      body += item;
+    }
+    if (i == st.qlen - 1 && st.wlen) {
+      body += ",\"ws\":[";
+      for (int k = 0; k < st.wlen; k++) {
+        snprintf(item, sizeof(item), "%s[%ld,%ld]", k ? "," : "", (long)(now - st.weights[k].at),
+                 (long)st.weights[k].raw);
+        body += item;
+      }
+      body += "]";
+      weightsSent = st.wlen;
+    }
+    body += "}";
   }
   body += "]}";
   return body;
+}
+
+void dropSentWeights(uint8_t n) {
+  n = std::min<uint8_t>(n, st.wlen);
+  memmove(&st.weights[0], &st.weights[n], (st.wlen - n) * sizeof(WeightReading));
+  st.wlen -= n;
 }
 
 // Guarda os telefones que a plataforma mandou (usados no SMS de emergência).
@@ -452,7 +526,8 @@ bool sendQueue() {
   }
   lastNetFailMs = 0;  // internet voltou
 
-  String body = buildBody();
+  uint8_t weightsSent;
+  String body = buildBody(weightsSent);
   String sig = hmacHex(body);
   bool ok = false;
 
@@ -466,11 +541,13 @@ bool sendQueue() {
     if (code == 200) {
       applyConfig(modem.https_body());
       st.qlen = 0;
+      dropSentWeights(weightsSent);
       ok = true;
     } else if (code == 400 || code == 401) {
       // Recusado pela plataforma (segredo errado ou dado inválido): não adianta repetir.
       trace("plataforma recusou: confira DEVICE_ID/DEVICE_SECRET no config.h");
       st.qlen = 0;
+      dropSentWeights(weightsSent);
     }
     modem.https_end();
   }
@@ -583,6 +660,11 @@ bool confirmMotion() {
 // ---------------------------------------------------------------------------
 void sleepFor(uint32_t seconds, bool wakeOnMotion) {
   modemOffAndHold();
+  if (SCALE_ENABLED) {
+    scale.begin(SCALE_DOUT_PIN, SCALE_SCK_PIN);  // garante o HX711 desligado
+    scale.powerDown();
+    gpio_deep_sleep_hold_en();  // e o pino SCK preso em nível alto durante o sono
+  }
   if (accelOk) {
     Accel rest;
     if (!inTheft() && readAverage(rest)) {
@@ -604,10 +686,16 @@ void sleepFor(uint32_t seconds, bool wakeOnMotion) {
   esp_deep_sleep_start();
 }
 
+// Dorme até a mensagem de vida ou, na colmeia com balança, até a próxima pesagem.
 void sleepUntilHeartbeat() {
   time_t now = now_s();
   if (st.nextHeartbeat <= now) st.nextHeartbeat = now + (time_t)st.heartbeatMin * 60;
-  sleepFor((uint32_t)(st.nextHeartbeat - now), true);
+  time_t wake = st.nextHeartbeat;
+  if (SCALE_ENABLED) {
+    if (st.nextWeigh <= now) st.nextWeigh = now + (time_t)SCALE_INTERVAL_MIN * 60;
+    wake = std::min(wake, st.nextWeigh);
+  }
+  sleepFor((uint32_t)(wake - now), true);
 }
 
 // ---------------------------------------------------------------------------
@@ -717,7 +805,9 @@ void setup() {
       trace("foi só uma batida: volta a dormir");
       sleepUntilHeartbeat();
     }
-    enqueue("movimento", true);  // última posição conhecida, para avisar já
+    int32_t raw;
+    bool weighed = weighNow(raw, 5);  // caixa tirada da balança: peso perto de zero
+    enqueue("movimento", true, weighed ? &raw : nullptr);  // última posição conhecida, para avisar já
     bool online = sendQueue();
     if (!online) sendPositionSms(false);
     if (getFix(90)) enqueue("posicao", true);
@@ -733,7 +823,14 @@ void setup() {
     finishAndSleep();
   }
 
-  // 3) Ligou agora (teste de ativação) ou hora da mensagem de vida
+  // 3) Só hora de pesar (colmeia sentinela): pesa sem ligar o modem e volta a dormir
+  if (SCALE_ENABLED && !firstBoot && cause == ESP_SLEEP_WAKEUP_TIMER && st.nextHeartbeat > now_s() + 60) {
+    recordWeight();
+    sleepUntilHeartbeat();
+  }
+
+  // 4) Ligou agora (teste de ativação / calibração da balança) ou hora da mensagem de vida
+  recordWeight();
   if (firstBoot || cause == ESP_SLEEP_WAKEUP_UNDEFINED) {
     enqueue("online", false);
     sendQueue();  // resposta rápida para a tela de ativação

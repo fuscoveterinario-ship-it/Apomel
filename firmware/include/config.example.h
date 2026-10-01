@@ -23,5 +23,10 @@
 // Inclinação mínima (graus) para considerar que a caixa foi realmente mexida.
 #define TILT_DEGREES              12
 
+// Balança (colmeia sentinela): 1 = esta caixa tem balança HX711; 0 = não tem.
+#define SCALE_ENABLED             0
+// Pesa a cada 3 h (só a balança acorda, sem modem); as pesagens vão juntas na mensagem do dia.
+#define SCALE_INTERVAL_MIN        180
+
 // Mostrar os comandos AT do modem no monitor serial (útil para depurar).
 // #define DUMP_AT_COMMANDS

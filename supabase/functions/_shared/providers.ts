@@ -22,6 +22,9 @@ export const WHATSAPP_TEMPLATE_PARAMS: Record<string, string[]> = {
   roubo_confirmado: ["caixa", "apiario", "link"],
   offline: ["caixa", "apiario", "hora", "link"],
   bateria_baixa: ["caixa", "apiario", "link"],
+  colheita: ["caixa", "apiario", "kg", "link"],
+  peso_baixo: ["caixa", "apiario", "kg", "link"],
+  enxame: ["caixa", "apiario", "kg", "hora", "link"],
 };
 
 const digits = (phone: string) => phone.replace(/\D/g, "");

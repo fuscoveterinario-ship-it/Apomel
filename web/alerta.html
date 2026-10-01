@@ -22,6 +22,7 @@
       <div><span>Bateria</span><b id="a-bat"></b></div>
       <div><span>Modo</span><b id="a-modo"></b></div>
     </div>
+    <p id="a-balanca" hidden></p>
     <div id="acoes">
       <button class="ok" data-acao="manutencao">Sou eu (manutenção)</button>
       <button class="perigo" data-acao="roubo">Possível roubo</button>
@@ -64,7 +65,7 @@ async function carregar(acao = "ver") {
   return data;
 }
 
-function render({ alert, device, track }) {
+function render({ alert, device, track, balanca }) {
   show("#alerta");
   const [titulo, texto] = alert.kind === "movimento"
     ? TEXTOS[alert.status] || [alert.status, ""]
@@ -76,6 +77,16 @@ function render({ alert, device, track }) {
   const pct = batteryPct(device.battery_mv);
   $("#a-bat").textContent = pct === null ? "—" : `${pct}%`;
   $("#a-modo").textContent = device.mode === "roubo" ? "rastreamento intensivo" : "normal";
+
+  // Colmeia com balança: peso antes e na hora do movimento.
+  const fmt = (v) => `${Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg`;
+  if (balanca && balanca.antes !== null && balanca.no_alerta !== null) {
+    const tirada = Number(balanca.no_alerta) < Number(balanca.antes) * 0.3;
+    $("#a-balanca").textContent = `Balança: ${fmt(balanca.antes)} antes, ${fmt(balanca.no_alerta)} na hora do movimento.` +
+      (tirada ? " A caixa foi tirada da balança." : "");
+    $("#a-balanca").className = tirada ? "erro" : "msg";
+    show("#a-balanca");
+  }
 
   const podeResponder = alert.kind === "movimento" && ["pendente", "escalado", "roubo_confirmado"].includes(alert.status);
   show("#acoes", podeResponder);

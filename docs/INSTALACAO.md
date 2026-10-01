@@ -78,6 +78,9 @@ parâmetros **na ordem indicada**:
 | `roubo_confirmado` | caixa, apiário, link | ALERTA BEE GUARD: ROUBO CONFIRMADO da {{1}} ({{2}}). Mapa: {{3}} |
 | `offline` | caixa, apiário, hora, link | AVISO: o rastreador da {{1}} ({{2}}) está sem comunicação desde {{3}}. Verifique: {{4}} |
 | `bateria_baixa` | caixa, apiário, link | AVISO: bateria baixa no rastreador da {{1}} ({{2}}). Recarregue: {{3}} |
+| `colheita` | caixa, apiário, kg, link | BEE GUARD: a {{1}} ({{2}}) ganhou {{3}} kg desde que a melgueira foi colocada. Pode estar na hora da colheita. Veja: {{4}} |
+| `peso_baixo` | caixa, apiário, kg, link | AVISO: a {{1}} ({{2}}) está com {{3}} kg, abaixo do limite. Pode faltar alimento. Veja: {{4}} |
+| `enxame` | caixa, apiário, kg, hora, link | AVISO: a {{1}} ({{2}}) perdeu {{3}} kg de repente perto das {{4}}. Pode ter enxameado. Veja: {{5}} |
 
 **Envio a cada minuto** (para o escalonamento de 5 min sair na hora certa). No SQL Editor:
 ```sql
@@ -146,4 +149,54 @@ Primeiro teste de bancada (tudo em cima da mesa, com o chip e as antenas):
 - incline a placa: deve aparecer `movimento` e chegar a mensagem de alerta.
 
 Ligação do acelerômetro: `docs/ligacao-lilygo.png` (T-A7670SA) e `docs/ligacao-sim7080.png` (T-SIM7080G-S3).
+Balança: passo 9 e `docs/ligacao-balanca.png`.
 O monitor mostra `rede encontrada: ...` com o tipo de rede (ex.: LTE CAT-M1 ou LTE NB-IOT): use isso no teste de cada apiário.
+
+## 9. Balança (colmeia sentinela)
+
+Uma colmeia com balança por apiário já mostra como o apiário inteiro está. A placa pesa a
+cada 3 horas sem ligar o modem (gasta quase nada) e manda as pesagens junto com a mensagem do dia.
+
+**Material:** kit com 4 células de carga de 50 kg + módulo HX711; duas placas firmes do
+tamanho do fundo da colmeia (ex.: compensado naval 18 mm); um conector à prova d'água de
+4 pinos (ex.: **GX12 de 4 pinos**) e uma caixinha para o HX711.
+
+**Montagem das células** (`docs/ligacao-balanca.png`):
+- uma célula em cada canto, entre a placa de baixo e a de cima;
+- a **borda** de cada célula apoia na placa de baixo, com arruelas, deixando ~2 mm de folga
+  embaixo do meio; o **meio** (onde tem o calombo) recebe a placa de cima;
+- ligue os fios em anel: **branco com branco** e **preto com preto** entre cantos vizinhos;
+- os fios **vermelhos**: canto 1 → **E+**, canto 3 (diagonal) → **E−**, canto 2 → **A+**,
+  canto 4 → **A−** do HX711 (se o peso sair negativo, não tem problema: a calibração corrige).
+
+**HX711 → placa** (4 fios, passando pelo conector GX12, para poder tirar a colmeia):
+
+| HX711 | T-SIM7080G-S3 (protótipo) | T-A7670SA |
+|---|---|---|
+| VCC | 3V3 | 3V3 |
+| GND | GND | GND |
+| DT (DOUT) | GPIO 16 | GPIO 18 |
+| SCK | GPIO 17 | GPIO 19 |
+
+(Os pinos da T-SIM7080G-S3 serão confirmados com a foto da placa, como o INT do acelerômetro.)
+
+No `firmware/include/config.h` desta caixa: `#define SCALE_ENABLED 1`.
+
+**Calibração** (no painel, botão *Ajustes da balança*):
+1. Balança vazia → aperte **RST** na placa → espere 2 min → **Balança vazia: zerar**.
+2. Ponha um peso conhecido (galão de 5 L de água = 5 kg) → **RST** → espere 2 min → informe o
+   peso → **Calibrar**.
+3. Tire o peso e coloque a colmeia.
+
+**Avisos:**
+- *Colheita*: ao colocar a melgueira, toque em **Coloquei a melgueira agora**; o peso de
+  referência é a pesagem seguinte. Quando a colmeia ganhar o peso combinado (padrão 15 kg,
+  ajustável), chega o aviso.
+- *Falta de alimento*: informe um peso mínimo (opcional); abaixo dele, aviso 1 vez por semana.
+- *Possível enxameação*: queda de 1,5 a 5 kg entre duas pesagens durante o dia, sem
+  manutenção nem alerta de movimento no período.
+- *Roubo*: no alerta de movimento aparece o peso antes e na hora; perto de zero = caixa tirada
+  da balança.
+
+Proteja o HX711 e as células da chuva. Calor e frio mudam um pouco a leitura (algumas centenas
+de gramas): por isso os avisos usam duas pesagens seguidas.

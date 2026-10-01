@@ -27,6 +27,10 @@
 #define ACCEL_SCL_PIN        7
 #define ACCEL_INT_PIN        8    // provisório: confirmar na foto da placa
 
+// Balança HX711 (só na colmeia sentinela)
+#define SCALE_DOUT_PIN       16   // provisório: confirmar na foto da placa
+#define SCALE_SCK_PIN        17
+
 #else
 // ---------------------------------------------------------------------------
 // LILYGO T-A7670SA R2: ESP32 + A7670SA (LTE Cat-1 + 2G + GNSS)
@@ -52,4 +56,8 @@
 #define ACCEL_SDA_PIN        21
 #define ACCEL_SCL_PIN        22
 #define ACCEL_INT_PIN        32   // INT1 do ADXL345: acorda a placa quando a caixa mexe
+
+// Balança HX711 (só na colmeia sentinela)
+#define SCALE_DOUT_PIN       18
+#define SCALE_SCK_PIN        19
 #endif

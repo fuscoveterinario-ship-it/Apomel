@@ -122,4 +122,80 @@ select public.colmeia_ingest_event('CS-0001', 8, 'vida', null, null, 3300);
 select public.colmeia_ingest_event('CS-0001', 9, 'vida', null, null, 3300);
 select pg_temp.check((select count(*) from public.colmeia_alerts where kind = 'bateria_baixa') = 1, 'bateria baixa avisa 1x');
 
+-- 9) Balança (colmeia sentinela)
+-- Antes da calibração guarda só o valor bruto.
+select public.colmeia_ingest_event('CS-0001', 10, 'online', null, null, 4000, 20, '4g', '{"ws":[[0,100000]]}');
+select pg_temp.check((select last_scale_raw = 100000 and last_weight_kg is null from public.colmeia_devices where id = 'CS-0001'),
+  'pesagem sem calibração guarda o valor bruto');
+select public.colmeia_ingest_event('CS-0001', 10, 'online', null, null, 4000, 20, '4g', '{"ws":[[0,100000]]}');
+select pg_temp.check((select count(*) from public.colmeia_weights) = 1, 'pesagem reenviada não duplica');
+
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select public.colmeia_scale_calibrate('CS-0001', 'zero');
+do $$ begin
+  perform public.colmeia_scale_calibrate('CS-0001', 'peso', 5);
+  raise exception 'FALHOU: calibrou sem nova pesagem';
+exception when sqlstate 'P0001' then raise notice 'ok: calibração pede nova pesagem com o peso em cima';
+end $$;
+reset role;
+select public.colmeia_ingest_event('CS-0001', 11, 'online', null, null, 4000, 20, '4g', '{"ws":[[0,150000]]}');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select pg_temp.check((public.colmeia_scale_calibrate('CS-0001', 'peso', 5)->>'kg')::numeric = 5, 'calibração com 5 kg');
+select public.colmeia_set_harvest('CS-0001', 15, null, true);
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+do $$ begin
+  perform public.colmeia_scale_calibrate('CS-0001', 'zero');
+  raise exception 'FALHOU: outro usuário calibrou';
+exception when sqlstate 'P0002' then raise notice 'ok: outro usuário não mexe na balança';
+end $$;
+select pg_temp.check((select count(*) from public.colmeia_weights) = 0, 'outro usuário não vê as pesagens (RLS)');
+reset role;
+select pg_temp.check((select kg from public.colmeia_weights order by measured_at limit 1) = 0, 'pesagens antigas recalculadas');
+
+-- Melgueira colocada há 2 dias; referência = primeira pesagem 30 min depois (40 kg).
+update public.colmeia_devices set harvest_base_at = now() - interval '2 days' where id = 'CS-0001';
+select public.colmeia_ingest_event('CS-0001', 12, 'vida', null, null, 4000, 20, '4g',
+  '{"ws":[[86400,500000],[43200,620000],[0,660000]]}');
+select pg_temp.check((select harvest_base_kg from public.colmeia_devices where id = 'CS-0001') = 40, 'peso de referência da melgueira');
+select pg_temp.check((select last_weight_kg from public.colmeia_devices where id = 'CS-0001') = 56, 'peso atual em kg');
+select pg_temp.check((select count(*) from public.colmeia_alerts where kind = 'colheita') = 0,
+  'sem aviso de colheita enquanto as 2 últimas pesagens não chegam ao ganho');
+select public.colmeia_ingest_event('CS-0001', 13, 'vida', null, null, 4000, 20, '4g', '{"ws":[[0,665000]]}');
+select pg_temp.check((select count(*) from public.colmeia_alerts where kind = 'colheita') = 1, 'aviso de colheita');
+select pg_temp.check((select body from public.colmeia_notifications where template = 'colheita' and channel = 'sms')
+                     like '%ganhou 16,0 kg%painel.html', 'texto do aviso de colheita');
+select public.colmeia_ingest_event('CS-0001', 14, 'vida', null, null, 4000, 20, '4g', '{"ws":[[0,670000]]}');
+select pg_temp.check((select count(*) from public.colmeia_alerts where kind = 'colheita') = 1, 'aviso de colheita não repete');
+
+-- Peso baixo (fome).
+update public.colmeia_devices set hunger_kg = 70 where id = 'CS-0001';
+select public.colmeia_ingest_event('CS-0001', 15, 'vida', null, null, 4000, 20, '4g', '{"ws":[[0,671000]]}');
+select pg_temp.check((select body from public.colmeia_notifications where template = 'peso_baixo' and channel = 'sms')
+                     like '%57,1 kg%', 'aviso de peso baixo');
+
+-- Queda de 2 kg entre duas pesagens durante o dia: possível enxameação.
+delete from public.colmeia_weights;
+insert into public.colmeia_weights (device_id, measured_at, raw, kg)
+select 'CS-0001', (dia + h) at time zone 'America/Sao_Paulo', 0, kg
+from (select date_trunc('day', now() at time zone 'America/Sao_Paulo')
+             - case when extract(hour from now() at time zone 'America/Sao_Paulo') >= 14 then interval '0' else interval '1 day' end as dia) x,
+     (values (interval '11 hours', 56.6), (interval '13 hours', 54.6)) v(h, kg);
+select public.colmeia_check_weight_alerts('CS-0001');
+select pg_temp.check((select body from public.colmeia_notifications where template = 'enxame' and channel = 'sms')
+                     like '%perdeu 2,0 kg de repente perto das 13:00%', 'aviso de possível enxameação');
+
+-- Alerta de movimento mostra o peso antes e na hora (caixa tirada da balança).
+update public.colmeia_alerts set status = 'encerrado' where kind = 'movimento';
+update public.colmeia_devices set mode = 'normal', maintenance_until = null where id = 'CS-0001';
+select public.colmeia_ingest_event('CS-0001', 16, 'movimento', null, null, 4000, 20, '4g', '{"w":100000}');
+select pg_temp.check(
+  (select (r #>> '{balanca,antes}')::numeric = 54.6 and (r #>> '{balanca,no_alerta}')::numeric = 0
+   from (select public.colmeia_respond_alert(token, 'ver') r from public.colmeia_alerts
+         where kind = 'movimento' and status = 'pendente') t),
+  'alerta mostra o peso antes e na hora do movimento');
+
 \echo 'TODOS OS TESTES PASSARAM'

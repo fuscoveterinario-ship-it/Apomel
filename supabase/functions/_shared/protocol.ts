@@ -4,6 +4,7 @@
 //   cabeçalho  x-device-id: CS-0001
 //   cabeçalho  x-signature: HMAC-SHA256(segredo do rastreador, corpo) em hexadecimal
 //   corpo      {"events":[{"seq":12,"t":"movimento","lat":-25.4,"lon":-49.2,"bat":4010,"sig":18}]}
+//   balança    "w": peso bruto na hora do evento; "ws": [[segundos atrás, peso bruto], ...]
 //
 // "seq" cresce sempre; mensagens repetidas (seq antigo) são ignoradas, o que
 // também impede que alguém reenvie uma mensagem capturada.
@@ -30,6 +31,25 @@ function num(v: unknown, min: number, max: number): number | null {
   return v;
 }
 
+// Valor bruto do HX711 (24 bits com sinal). A plataforma converte em kg com a calibração.
+function rawWeight(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v >= -8388608 && v <= 8388607 ? v : null;
+}
+
+// Pesagens guardadas pela placa: [[segundos atrás, valor bruto], ...] (até 3 dias).
+function weightList(v: unknown): [number, number][] {
+  if (!Array.isArray(v)) return [];
+  const out: [number, number][] = [];
+  for (const item of v.slice(0, 48)) {
+    if (!Array.isArray(item) || item.length !== 2) continue;
+    const [age, raw] = item;
+    if (typeof age !== "number" || !Number.isInteger(age) || age < 0 || age > 7 * 86400) continue;
+    const r = rawWeight(raw);
+    if (r !== null) out.push([age, r]);
+  }
+  return out;
+}
+
 // Valida o corpo recebido. Lança Error com mensagem curta se estiver inválido.
 export function parseIngestBody(raw: string): DeviceEvent[] {
   let body: unknown;
@@ -52,6 +72,10 @@ export function parseIngestBody(raw: string): DeviceEvent[] {
     const channel = CHANNELS.includes(e.ch as typeof CHANNELS[number]) ? String(e.ch) : "4g";
     const payload: Record<string, unknown> = {};
     for (const k of ["age", "fix", "acc", "sats", "fw", "boot"]) if (k in e) payload[k] = e[k];
+    const w = rawWeight(e.w);
+    if (w !== null) payload.w = w;
+    const ws = weightList(e.ws);
+    if (ws.length) payload.ws = ws;
     return {
       seq,
       type: e.t as EventType,

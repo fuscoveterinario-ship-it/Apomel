@@ -30,6 +30,15 @@ test("valida e ordena eventos", () => {
   assert.deepEqual(ev[1].payload, { age: 3 });
 });
 
+test("pesagens da balança: aceita valores válidos e ignora lixo", () => {
+  const [ev] = parseIngestBody(JSON.stringify({
+    events: [{ seq: 1, t: "vida", w: -1234, ws: [[10800, 512000], [0, 515000], [-5, 1], [3, 9e9], "x", [1]] }],
+  }));
+  assert.deepEqual(ev.payload, { w: -1234, ws: [[10800, 512000], [0, 515000]] });
+  const [ev2] = parseIngestBody(JSON.stringify({ events: [{ seq: 2, t: "vida", w: 1.5, ws: "x" }] }));
+  assert.deepEqual(ev2.payload, {});
+});
+
 test("recusa corpo inválido", () => {
   for (const bad of ["x", "{}", '{"events":[]}', '{"events":[{"seq":0,"t":"vida"}]}',
                      '{"events":[{"seq":1,"t":"hack"}]}']) {
