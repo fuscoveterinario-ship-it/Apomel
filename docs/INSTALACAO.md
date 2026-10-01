@@ -14,8 +14,8 @@ O login usa os mesmos usuários do projeto. **Não altere o "Site URL" nem os mo
 do Authentication (os outros sistemas usam): apenas **adicione** o endereço do site do Colmeia em
 *Authentication → URL Configuration → Redirect URLs*. O login funciona clicando no link do e-mail.
 
-Falta: publicar o site (passo 5), trocar `https://beeguard.example` pelo endereço real
-(passo 1.3) e contratar WhatsApp/SMS (passo 4). Até lá as mensagens ficam como "simulado".
+Endereço do site: **https://beeguard.com.br** (domínio registrado na HostGator; `site_url` já
+atualizado). Falta: publicar o site no Netlify e apontar o domínio (passo 5) e contratar WhatsApp/SMS (passo 4). Até lá as mensagens ficam como "simulado".
 
 ---
 
@@ -103,6 +103,16 @@ que lê o repositório privado:
 2. *Add new site → Import an existing project → GitHub* → escolha `bee-guard`.
 3. Não precisa mudar nada: o arquivo `netlify.toml` já diz para publicar a pasta `web/`.
 4. Anote o endereço gerado (ex.: `https://bee-guard.netlify.app`) e use nos passos 1.3 e 2.
+
+Sem o repositório ainda: em *Add new site → Deploy manually*, arraste a pasta `web/`.
+
+**Domínio beeguard.com.br (HostGator):**
+1. No Netlify: *Domain management → Add a domain* → `beeguard.com.br` → *Set up Netlify DNS*.
+   O Netlify mostra 4 servidores DNS (ex.: `dns1.p0X.nsone.net`).
+2. Na HostGator: *Domínios → beeguard.com.br → Configurar domínio → Servidores DNS* → troque
+   pelos 4 do Netlify. Leva de algumas horas até 1 dia para valer; o HTTPS é automático.
+3. No Supabase (*Authentication → URL Configuration*): **adicione** em *Redirect URLs*
+   `https://beeguard.com.br/**`. Não mude o *Site URL* (é dos outros sistemas).
 
 (Alternativa equivalente: Cloudflare Pages, com *Build output directory* = `web`.)
 O `web/config.js` já aponta para o projeto Supabase.
