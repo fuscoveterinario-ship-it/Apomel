@@ -8,6 +8,7 @@
 <link rel="icon" href="icone.png">
 <link rel="apple-touch-icon" href="icone.png">
 <meta name="theme-color" content="#111111">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
 <header><a class="marca" href="index.html"><img src="icone.png" alt="" width="40" height="40"><span>BEEGUARD<small>Celular como rastreador de teste</small></span></a></header>
@@ -40,6 +41,13 @@
       <div><span>GPS</span><b id="p-gps">aguardando…</b></div>
       <div><span>Última resposta</span><b id="p-resp">—</b></div>
     </div>
+    <div id="map" hidden></div>
+    <div class="ajuda">
+      <p><b>Acompanhar no computador:</b> abra o link abaixo e entre com o mesmo e-mail.
+        Quando houver alerta, o mapa e o trajeto aparecem lá (e no link do SMS).</p>
+      <p><a id="link-pc" href="painel.html" target="_blank" rel="noopener">beeguard.com.br/painel.html</a></p>
+      <button type="button" class="secundario mini" id="b-copiar">Copiar link</button>
+    </div>
     <button class="secundario" id="b-mexer">Simular movimento agora</button>
     <button class="secundario" id="b-parar">Parar</button>
     <h2>Registro</h2>
@@ -47,6 +55,7 @@
   </section>
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script type="module">
 import { $, show, sb, ensureLogin, normalizePhone, errorText } from "./app.js";
 import { INGEST_URL } from "./config.js";
@@ -151,6 +160,32 @@ function tick() {
   }
 }
 
+// Mapa com a posição atual do celular (e o caminho percorrido desde que começou).
+let mapa, marcador, caminho;
+function mostrarNoMapa(pos) {
+  if (!window.L) return;
+  const ponto = [pos.lat, pos.lon];
+  if (!mapa) {
+    show("#map");
+    mapa = L.map("map").setView(ponto, 16);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(mapa);
+    marcador = L.marker(ponto).addTo(mapa).bindPopup("Este celular (rastreador de teste)");
+    caminho = L.polyline([ponto], { color: "#c62828" }).addTo(mapa);
+    return;
+  }
+  marcador.setLatLng(ponto);
+  caminho.addLatLng(ponto);
+  mapa.panTo(ponto);
+}
+
+$("#link-pc").textContent = `${location.host}/painel.html`;
+$("#link-pc").href = `${location.origin}/painel.html`;
+$("#b-copiar").onclick = async () => {
+  const link = `${location.origin}/painel.html`;
+  try { await navigator.clipboard.writeText(link); $("#b-copiar").textContent = "Link copiado ✓"; }
+  catch { prompt("Copie o link:", link); }
+};
+
 async function start(id, sec) {
   deviceId = String(id || "").trim().toUpperCase();
   secret = String(sec || "").trim();
@@ -168,6 +203,7 @@ async function start(id, sec) {
         const primeira = !state.pos;
         state.pos = { lat: p.coords.latitude, lon: p.coords.longitude };
         $("#p-gps").textContent = `±${Math.round(p.coords.accuracy)} m`;
+        mostrarNoMapa(state.pos);
         // A primeira posição costuma chegar depois do "online": manda logo, sem esperar 10 min.
         if (primeira) send("posicao");
       },
