@@ -43,7 +43,7 @@
     </div>
     <div id="map" hidden></div>
     <div class="ajuda">
-      <p><b>Acompanhar no computador:</b> abra o link abaixo e entre com o mesmo e-mail.
+      <p><b>Acompanhar no computador:</b> abra o link abaixo e entre com o mesmo celular (ou e-mail).
         Quando houver alerta, o mapa e o trajeto aparecem lá (e no link do SMS).</p>
       <p><a id="link-pc" href="painel.html" target="_blank" rel="noopener">beeguard.com.br/painel.html</a></p>
       <button type="button" class="secundario mini" id="b-copiar">Copiar link</button>
@@ -223,7 +223,7 @@ async function start(id, sec) {
 
 $("#f-config").onsubmit = (ev) => { ev.preventDefault(); start($("#f-config").id.value, $("#f-config").secret.value); };
 
-// Jeito simples: entra com o e-mail, informa o telefone e o sistema cria o rastreador de teste.
+// Jeito simples: entra com o celular ou e-mail, informa o telefone e o sistema cria o rastreador de teste.
 // Link de demonstração pode trazer o telefone: celular-teste.html?tel=41999990001
 $("#f-tel").tel.value = new URLSearchParams(location.search).get("tel") || store.get("cs-tel");
 $("#f-tel").onsubmit = async (ev) => {

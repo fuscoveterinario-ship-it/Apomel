@@ -1,9 +1,12 @@
-// Login do Bee Guard por código de 6 números, enviado pelo próprio Bee Guard (Resend),
-// em português e com a marca. Não altera os modelos de e-mail do projeto (usados por
-// outros sistemas). Sem RESEND_API_KEY, responde { fallback: true } e o site usa o
-// e-mail padrão do Supabase.
+// Login do Bee Guard por código de 6 números, enviado pelo próprio Bee Guard:
+//  - por SMS (celular): a conta fica num e-mail interno p<número>@telefone.beeguard.com.br,
+//    que o apicultor nunca vê (muitos apicultores não usam e-mail);
+//  - por e-mail (Resend), em português e com a marca. Sem RESEND_API_KEY, responde
+//    { fallback: true } e o site usa o e-mail padrão do Supabase.
+// Não altera os modelos de e-mail do projeto (usados por outros sistemas).
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { loginEmail, normalizeEmail } from "../_shared/login_email.ts";
+import { loginEmail, loginSms, normalizeEmail, phoneLoginEmail, normalizeLoginPhone } from "../_shared/login_email.ts";
+import { send } from "../_shared/providers.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
   auth: { persistSession: false },
@@ -35,10 +38,33 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   if (req.method !== "POST") return reply({ ok: false, error: "use POST" }, 405);
 
+  const body = await req.json().catch(() => ({}));
+
+  // Login pelo celular: código por SMS.
+  if ((body as { phone?: unknown }).phone !== undefined) {
+    const phone = normalizeLoginPhone((body as { phone?: unknown }).phone);
+    if (!phone) return reply({ ok: false, error: "Celular inválido. Use DDD + número, ex.: (41) 99999-0001." }, 400);
+    const email = phoneLoginEmail(phone);
+    const { data: allowed, error: rpcError } = await db.rpc("colmeia_login_allowed", { p_email: email });
+    if (rpcError) {
+      console.error("colmeia_login_allowed", rpcError.message);
+      return reply({ ok: false, error: "Não foi possível enviar o código agora." }, 500);
+    }
+    if (!allowed) return reply({ ok: false, error: "Muitos pedidos de código. Espere 15 minutos e tente de novo." }, 429);
+    const code = await otpFor(email);
+    if (!code) return reply({ ok: false, error: "Não foi possível gerar o código agora." }, 500);
+    const r = await send({ id: 0, to_phone: phone, channel: "sms", template: "login", body: loginSms(code), params: {} },
+      (k) => Deno.env.get(k));
+    if (r.status !== "enviado") {
+      console.error("sms login", r.status, r.error);
+      return reply({ ok: false, error: "Não foi possível enviar o SMS agora. Tente de novo em alguns minutos." }, 502);
+    }
+    return reply({ ok: true, email });
+  }
+
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) return reply({ ok: false, fallback: true });
 
-  const body = await req.json().catch(() => ({}));
   const email = normalizeEmail((body as { email?: unknown }).email);
   if (!email) return reply({ ok: false, error: "E-mail inválido." }, 400);
 

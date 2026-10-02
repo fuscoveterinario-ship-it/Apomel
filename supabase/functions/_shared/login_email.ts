@@ -8,6 +8,25 @@ export function normalizeEmail(raw: unknown): string | null {
   return email.length <= 254 && EMAIL_RE.test(email) ? email : null;
 }
 
+// Login pelo celular: número no formato +55DDDNÚMERO (celular brasileiro com 10 ou 11 dígitos).
+export function normalizeLoginPhone(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  let d = raw.replace(/\D/g, "");
+  if (d.startsWith("55") && (d.length === 12 || d.length === 13)) d = d.slice(2);
+  d = d.replace(/^0+/, "");
+  return d.length === 10 || d.length === 11 ? `+55${d}` : null;
+}
+
+// E-mail interno da conta de quem entra pelo celular (o apicultor nunca vê nem recebe nada nele).
+export function phoneLoginEmail(phone: string): string {
+  return `p${phone.replace(/\D/g, "")}@telefone.beeguard.com.br`;
+}
+
+// SMS do código de acesso (sem acentos, curto: cabe em 1 SMS).
+export function loginSms(code: string): string {
+  return `BEE GUARD: seu codigo de acesso e ${code.replace(/\D/g, "")}. Nao compartilhe este codigo. Suporte: ${SUPPORT_PHONE}`;
+}
+
 // Contato de suporte mostrado no e-mail.
 export const SUPPORT_PHONE = "(41) 99676-7045";
 export const SUPPORT_WHATSAPP = "https://wa.me/5541996767045";

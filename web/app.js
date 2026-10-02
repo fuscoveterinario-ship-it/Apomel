@@ -54,7 +54,7 @@ export function errorText(e) {
   return m;
 }
 
-// Login por código enviado ao e-mail (sem senha).
+// Login por código de 6 números (sem senha): pelo celular (SMS) ou pelo e-mail.
 export async function ensureLogin(container, onReadyOnce) {
   let done = false;
   const onReady = (session) => { if (!done) { done = true; onReadyOnce(session); } };
@@ -62,16 +62,17 @@ export async function ensureLogin(container, onReadyOnce) {
   if (data.session) return onReady(data.session);
   container.innerHTML = `
     <h2>Entrar</h2>
-    <p>Digite seu e-mail. Enviaremos um código de acesso, sem senha.</p>
-    <form id="f-email"><label>E-mail<input type="email" id="login-email" name="email" required autocomplete="email"></label>
+    <form id="f-login"><p>Digite o seu <b>celular</b> (recebe o código por SMS) <b>ou</b> o seu <b>e-mail</b>.
+      O código de acesso tem 6 números, sem senha.</p>
+      <label>Celular ou e-mail<input id="login-id" name="id" required autocomplete="username"
+        placeholder="(41) 99999-0001 ou nome@email.com"></label>
       <button>Receber código</button></form>
     <form id="f-code" hidden>
-      <p class="aviso-email">Enviamos um e-mail de <b>Bee Guard</b> com um código de 6 números.
-        Não chegou em 1 minuto? Confira o <b>spam</b> ou <b>promoções</b>.</p>
+      <p class="aviso-email" id="aviso-code"></p>
       <label>Código recebido<input id="login-code" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="10"
         required autocomplete="one-time-code"></label>
       <button>Entrar</button>
-      <button type="button" class="secundario" id="outro-email">Usar outro e-mail</button></form>
+      <button type="button" class="secundario" id="voltar-login">Pedir outro código</button></form>
     <div id="enviado" class="aviso-email" hidden>
       <p><b>Pronto! Agora abra o seu e-mail.</b></p>
       <ol>
@@ -84,28 +85,49 @@ export async function ensureLogin(container, onReadyOnce) {
     </div>
     <p class="msg" id="login-msg"></p>`;
   const msg = (t) => { container.querySelector("#login-msg").textContent = t; };
-  const fEmail = container.querySelector("#f-email");
+  const fLogin = container.querySelector("#f-login");
   const fCode = container.querySelector("#f-code");
   let email = "";
-  fEmail.onsubmit = async (ev) => {
+  const pedirCodigo = (aviso) => {
+    msg("");
+    show(fLogin, false);
+    container.querySelector("#aviso-code").innerHTML = aviso;
+    show(fCode);
+    fCode.querySelector("input").focus();
+  };
+  const erroDaFuncao = async (error) => {
+    let text = "Não foi possível enviar o código. Tente de novo.";
+    try { text = (await error.context.json()).error || text; } catch { /* sem detalhe */ }
+    return text;
+  };
+  // Com "@" é e-mail; sem, é celular (código por SMS).
+  fLogin.onsubmit = async (ev) => {
     ev.preventDefault();
-    email = ev.target.email.value.trim();
-    const btn = fEmail.querySelector("button");
+    const valor = ev.target.id.value.trim();
+    const btn = fLogin.querySelector("button");
+    if (!valor.includes("@")) {
+      const phone = normalizePhone(valor);
+      if (!phone || !phone.startsWith("+55")) return msg("Celular inválido. Use DDD + número, ex.: (41) 99999-0001.");
+      btn.disabled = true;
+      msg("Enviando…");
+      const { data: r, error } = await sb.functions.invoke("colmeia-login", { body: { phone } });
+      btn.disabled = false;
+      if (error || !r?.ok) return msg(error ? await erroDaFuncao(error) : "Não foi possível enviar o código.");
+      email = r.email;
+      return pedirCodigo("Enviamos um <b>SMS</b> do <b>Bee Guard</b> com um código de 6 números. Pode levar alguns minutos.");
+    }
+    email = valor;
     btn.disabled = true;
     msg("Enviando…");
     // Código enviado pelo próprio Bee Guard; sem o serviço de e-mail configurado, usa o link padrão.
     const { data: r, error } = await sb.functions.invoke("colmeia-login", { body: { email } });
     btn.disabled = false;
     if (!error && r?.ok) {
-      msg("");
-      show(fEmail, false);
-      show(fCode);
-      fCode.querySelector("input").focus();
-      return;
+      return pedirCodigo("Enviamos um e-mail de <b>Bee Guard</b> com um código de 6 números. " +
+        "Não chegou em 1 minuto? Confira o <b>spam</b> ou <b>promoções</b>.");
     }
     if (error && !r?.fallback) {
-      let text = "Não foi possível enviar o código. Tente de novo.";
-      try { text = (await error.context.json()).error || text; } catch { /* sem detalhe */ }
+      const text = await erroDaFuncao(error);
       if (!(error.context && error.context.status === 404)) return msg(text);
     }
     const { error: e2 } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href } });
@@ -119,7 +141,7 @@ export async function ensureLogin(container, onReadyOnce) {
     if (error) msg(/expired|invalid/i.test(error.message) ? "Código errado ou vencido. Confira o número ou peça um novo." : errorText(error));
     else onReady(d.session);
   };
-  container.querySelector("#outro-email").onclick = () => { show(fCode, false); show(fEmail); msg(""); };
+  container.querySelector("#voltar-login").onclick = () => { show(fCode, false); show(fLogin); msg(""); };
   sb.auth.onAuthStateChange((_e, session) => { if (session) onReady(session); });
 }
 

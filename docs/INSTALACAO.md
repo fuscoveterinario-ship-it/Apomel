@@ -215,7 +215,16 @@ No `firmware/include/config.h` desta caixa: `#define SCALE_ENABLED 1`.
 Proteja o HX711 e as células da chuva. Calor e frio mudam um pouco a leitura (algumas centenas
 de gramas): por isso os avisos usam duas pesagens seguidas.
 
-## 10. E-mail de acesso do Bee Guard (código de 6 números)
+## 10. Login pelo celular (SMS) ou e-mail
+
+Na tela de entrada há um campo só, "Celular ou e-mail":
+- **Celular:** o código de 6 números vai por **SMS** (mesmo serviço dos alertas, `SMS_PROVIDER`).
+  A conta fica num e-mail interno `p55DDDNÚMERO@telefone.beeguard.com.br`, que o apicultor nunca vê.
+- **E-mail:** o código vai por e-mail (Resend), como abaixo.
+Limite: 3 códigos por celular/e-mail a cada 15 minutos e 200 por hora no total.
+Quem entrou pelo celular e quem entrou pelo e-mail são contas diferentes.
+
+### E-mail de acesso do Bee Guard (código de 6 números)
 
 O login usa a função `colmeia-login`, que manda um e-mail **do Bee Guard**, em português, com
 um código de 6 números (pelo serviço **Resend**). Os modelos de e-mail do Supabase, usados
