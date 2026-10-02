@@ -440,4 +440,22 @@ select pg_temp.check((select count(*) from public.colmeia_notifications n join p
                       where a.device_id = 'CS-0001' and a.status = 'escalado' and n.template = 'alerta_escalado' and n.channel = 'sms') = 1,
   'escalada com secundário igual ao principal manda 1 SMS');
 
+-- 18) Celular de teste: e-mail (login) + telefone criam um rastreador de teste só do apicultor.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select public.colmeia_my_test_device('+5541988887777') ->> 'id' as teste_id \gset
+select pg_temp.check(:'teste_id' like 'TESTE-%' and public.colmeia_my_test_device('+5541977776666') ->> 'id' = :'teste_id',
+  'rastreador de teste criado e reaproveitado');
+reset role;
+select pg_temp.check((select status = 'ativo' and primary_phone = '+5541977776666'
+                             and owner_id = '00000000-0000-0000-0000-00000000000b'
+                      from public.colmeia_devices where id = :'teste_id'), 'rastreador de teste ativo com o telefone informado');
+set role anon;
+do $$ begin
+  perform public.colmeia_my_test_device('+5541988887777');
+  raise exception 'FALHOU: criou rastreador sem login';
+exception when insufficient_privilege then raise notice 'ok: sem login não cria rastreador de teste';
+end $$;
+reset role;
+
 \echo 'TODOS OS TESTES PASSARAM'

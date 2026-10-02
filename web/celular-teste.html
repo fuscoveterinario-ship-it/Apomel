@@ -12,17 +12,25 @@
 <body>
 <header><a class="marca" href="index.html"><img src="icone.png" alt="" width="40" height="40"><span>BEEGUARD<small>Celular como rastreador de teste</small></span></a></header>
 <main>
-  <section class="card" id="config">
-    <h2>Configurar</h2>
-    <p class="passos">Use um rastreador de teste só para o celular (ex.: <code>CS-CELULAR</code>), criado com
-      <code>node tools/novo-rastreador.mjs CS-CELULAR</code> e ativado pelo QR Code como um rastreador normal.</p>
-    <form id="f-config">
-      <label>Código do rastreador<input name="id" required autocomplete="off" placeholder="CS-CELULAR"></label>
-      <label>Segredo do rastreador<input name="secret" required autocomplete="off"></label>
+  <section class="card" id="login"><p class="msg">Carregando… (precisa de internet)</p></section>
+  <section class="card" id="config" hidden>
+    <h2>Transformar este celular em rastreador de teste</h2>
+    <p class="passos">Serve para testar e demonstrar o Bee Guard sem a placa. O celular faz o papel do rastreador:
+      se for mexido, o alerta vai por SMS para o telefone abaixo.</p>
+    <form id="f-tel">
+      <label>Telefone que recebe o alerta<input name="tel" type="tel" required placeholder="(41) 99999-0001"></label>
       <button>Iniciar rastreador de teste</button>
+      <p class="erro" id="erro-tel"></p>
     </form>
+    <details>
+      <summary>Usar um rastreador de teste já cadastrado (código e segredo)</summary>
+      <form id="f-config">
+        <label>Código do rastreador<input name="id" autocomplete="off" placeholder="CS-CELULAR"></label>
+        <label>Segredo do rastreador<input name="secret" autocomplete="off"></label>
+        <button class="secundario">Iniciar com código e segredo</button>
+      </form>
+    </details>
   </section>
-
   <section class="card" id="painel" hidden>
     <h2 id="p-titulo">Rastreador ativo</h2>
     <p class="passos">Deixe esta página aberta e a tela ligada. Coloque o celular dentro da caixa e mexa nela para testar o alerta.</p>
@@ -40,7 +48,7 @@
 </main>
 
 <script type="module">
-import { $, show } from "./app.js";
+import { $, show, sb, ensureLogin, normalizePhone, errorText } from "./app.js";
 import { INGEST_URL } from "./config.js";
 
 const store = {
@@ -143,9 +151,10 @@ function tick() {
   }
 }
 
-async function start() {
-  deviceId = $("#f-config").id.value.trim().toUpperCase();
-  secret = $("#f-config").secret.value.trim();
+async function start(id, sec) {
+  deviceId = String(id || "").trim().toUpperCase();
+  secret = String(sec || "").trim();
+  if (!deviceId || !secret) { alert("Informe o código e o segredo."); return; }
   store.set("cs-id", deviceId);
   store.set("cs-secret", secret);
 
@@ -176,7 +185,25 @@ async function start() {
   state.timers.push(setInterval(() => send("vida"), 10 * 60_000));
 }
 
-$("#f-config").onsubmit = (ev) => { ev.preventDefault(); start(); };
+$("#f-config").onsubmit = (ev) => { ev.preventDefault(); start($("#f-config").id.value, $("#f-config").secret.value); };
+
+// Jeito simples: entra com o e-mail, informa o telefone e o sistema cria o rastreador de teste.
+// Link de demonstração pode trazer o telefone: celular-teste.html?tel=41999990001
+$("#f-tel").tel.value = new URLSearchParams(location.search).get("tel") || store.get("cs-tel");
+$("#f-tel").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const b = ev.target.querySelector("button");
+  const tel = normalizePhone(ev.target.tel.value);
+  if (!tel) { $("#erro-tel").textContent = "Telefone inválido. Use DDD + número, ex.: (41) 99999-0001."; return; }
+  b.disabled = true;
+  const { data, error } = await sb.rpc("colmeia_my_test_device", { p_phone: tel });
+  b.disabled = false;
+  if (error) { $("#erro-tel").textContent = errorText(error); return; }
+  $("#erro-tel").textContent = "";
+  store.set("cs-tel", ev.target.tel.value);
+  start(data.id, data.secret);
+};
+ensureLogin($("#login"), () => { show("#login", false); show("#config"); });
 $("#b-mexer").onclick = () => motionDetected();
 $("#b-parar").onclick = () => location.reload();
 document.addEventListener("visibilitychange", async () => {
