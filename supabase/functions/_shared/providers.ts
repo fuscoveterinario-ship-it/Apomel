@@ -57,7 +57,8 @@ export function whatsappRequest(n: Notification, env: Env): Request | null {
 }
 
 export function smsRequest(n: Notification, env: Env): Request | null {
-  const provider = (env("SMS_PROVIDER") ?? "simulado").toLowerCase();
+  // params.provider força uma empresa só para essa mensagem (usado para comparar empresas).
+  const provider = (n.params?.provider ?? env("SMS_PROVIDER") ?? "simulado").toLowerCase();
   // SMS sem acentos: as operadoras trocam ou somem com eles (ex.: "até" chegava "at "), e sem
   // acento cabem mais letras em cada SMS. Limite de 450 caracteres (até 3 SMS).
   const plain = n.body.normalize("NFD").replace(/[\u0300-\u036f]/g, "");

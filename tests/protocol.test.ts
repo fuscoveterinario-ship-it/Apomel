@@ -153,3 +153,11 @@ test("SMS pela SMSDev: chave no corpo e erro lido de \"situacao\"", async () => 
   assert.equal(r.status, "falhou");
   assert.match(r.error!, /SALDO INSUFICIENTE/);
 });
+
+test("params.provider escolhe a empresa só para aquela mensagem", () => {
+  const n = { id: 1, to_phone: "+5541996767045", channel: "sms" as const, template: "teste", body: "x",
+    params: { provider: "smsdev" } };
+  const env = (k: string) => ({ SMS_PROVIDER: "mobizon", MOBIZON_API_KEY: "m", SMSDEV_KEY: "s" } as Record<string, string>)[k];
+  assert.equal(smsRequest(n, env)!.url, "https://api.smsdev.com.br/v1/send");
+  assert.match(smsRequest({ ...n, params: {} }, env)!.url, /mobizon/);
+});
