@@ -430,4 +430,14 @@ select pg_temp.check((select home_lat is null from public.colmeia_devices where 
 select pg_temp.check((select count(*) from public.colmeia_alerts where device_id = 'CS-0001' and status = 'pendente') = 0,
   'mudança em manutenção não gera alerta');
 
+-- 17) Secundário igual ao principal: a escalada manda um SMS só.
+update public.colmeia_devices set maintenance_until = null, mode = 'normal', secondary_phone = primary_phone where id = 'CS-0001';
+update public.colmeia_alerts set status = 'encerrado' where status in ('pendente', 'escalado');
+select public.colmeia_ingest_event('CS-0001', 950, 'movimento', -25.6000, -49.3000);
+update public.colmeia_alerts set escalate_at = now() - interval '1 second' where device_id = 'CS-0001' and status = 'pendente';
+select public.colmeia_escalate_alerts();
+select pg_temp.check((select count(*) from public.colmeia_notifications n join public.colmeia_alerts a on a.id = n.alert_id
+                      where a.device_id = 'CS-0001' and a.status = 'escalado' and n.template = 'alerta_escalado' and n.channel = 'sms') = 1,
+  'escalada com secundário igual ao principal manda 1 SMS');
+
 \echo 'TODOS OS TESTES PASSARAM'
