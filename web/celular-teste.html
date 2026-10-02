@@ -40,6 +40,7 @@
       <div><span>Modo</span><b id="p-modo">normal</b></div>
       <div><span>GPS</span><b id="p-gps">aguardando…</b></div>
       <div><span>Última resposta</span><b id="p-resp">—</b></div>
+      <div><span>Tempo de teste restante</span><b id="p-tempo">—</b></div>
     </div>
     <div id="map" hidden></div>
     <div class="ajuda">
@@ -47,6 +48,10 @@
         Quando houver alerta, o mapa e o trajeto aparecem lá (e no link do SMS).</p>
       <p><a id="link-pc" href="painel.html" target="_blank" rel="noopener">beeguard.com.br/painel.html</a></p>
       <button type="button" class="secundario mini" id="b-copiar">Copiar link</button>
+    </div>
+    <div class="ajuda" id="fim-teste" hidden>
+      <p><b>Teste encerrado.</b> O rastreador de teste desliga sozinho depois de 20 minutos para não gastar SMS.
+        Para testar de novo, toque em <b>Parar</b> e inicie outra vez.</p>
     </div>
     <button class="secundario" id="b-mexer">Simular movimento agora</button>
     <button class="secundario" id="b-parar">Parar</button>
@@ -219,6 +224,14 @@ async function start(id, sec) {
   send("online");
   state.timers.push(setInterval(tick, 60_000));
   state.timers.push(setInterval(() => send("vida"), 10 * 60_000));
+  // O teste desliga sozinho em 20 minutos, para não gastar SMS à toa.
+  const fim = Date.now() + 20 * 60_000;
+  state.timers.push(setInterval(() => {
+    const falta = Math.max(0, Math.ceil((fim - Date.now()) / 60_000));
+    $("#p-tempo").textContent = `${falta} min`;
+    if (Date.now() >= fim) encerrarTeste();
+  }, 15_000));
+  $("#p-tempo").textContent = "20 min";
 }
 
 $("#f-config").onsubmit = (ev) => { ev.preventDefault(); start($("#f-config").id.value, $("#f-config").secret.value); };
@@ -242,6 +255,18 @@ $("#f-tel").onsubmit = async (ev) => {
 ensureLogin($("#login"), () => { show("#login", false); show("#config"); });
 $("#b-mexer").onclick = () => motionDetected();
 $("#b-parar").onclick = () => location.reload();
+
+function encerrarTeste() {
+  state.timers.forEach((t) => clearInterval(t));
+  state.timers = [];
+  window.removeEventListener("devicemotion", onMotion);
+  try { state.wakeLock?.release(); } catch { /* ignore */ }
+  $("#p-estado").textContent = "teste encerrado";
+  $("#p-tempo").textContent = "0 min";
+  log("teste encerrado depois de 20 minutos (para não gastar SMS à toa)");
+  $("#b-mexer").disabled = true;
+  show("#fim-teste");
+}
 document.addEventListener("visibilitychange", async () => {
   if (document.visibilityState === "visible" && state.timers.length) {
     try { state.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* ignore */ }

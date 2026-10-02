@@ -469,4 +469,21 @@ select pg_temp.check((select body not like '%http%' and body like 'ALERTA BEE GU
                       from public.colmeia_notifications where template = 'alerta_escalado_curto' order by id desc limit 1),
   'SMS curto sem link e com a hora');
 
+-- 20) Rastreador de teste: 20 minutos, sem "sem comunicação" e no máximo 12 SMS por dia.
+select :'teste_id' as tid \gset
+update public.colmeia_devices set maintenance_until = null, mode = 'normal', last_seq = 0 where id = :'tid';
+select public.colmeia_ingest_event(:'tid', 10, 'movimento', -25.5, -49.3);
+select pg_temp.check((select count(*) from public.colmeia_notifications where device_id = :'tid' and channel = 'sms') = 2,
+  'teste: alerta manda o SMS curto e o completo');
+select public.colmeia_enqueue_alert_messages((select id from public.colmeia_alerts where device_id = :'tid' order by opened_at desc limit 1),
+  '+5541977776666', 'offline');
+select pg_temp.check((select count(*) from public.colmeia_notifications where device_id = :'tid' and template = 'offline') = 0,
+  'teste: sem SMS de "sem comunicação"');
+update public.colmeia_alerts set opened_at = now() - interval '21 minutes' where device_id = :'tid' and status = 'pendente';
+select public.colmeia_enqueue_alert_messages((select id from public.colmeia_alerts where device_id = :'tid' order by opened_at desc limit 1),
+  '+5541977776666', 'alerta_escalado');
+select pg_temp.check((select count(*) from public.colmeia_notifications where device_id = :'tid' and template like 'alerta_escalado%') = 0
+                     and (select status = 'encerrado' from public.colmeia_alerts where device_id = :'tid' order by opened_at desc limit 1),
+  'teste: depois de 20 minutos o alerta é encerrado sem mandar SMS');
+
 \echo 'TODOS OS TESTES PASSARAM'
