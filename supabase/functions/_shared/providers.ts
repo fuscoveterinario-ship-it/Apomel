@@ -92,6 +92,17 @@ export function smsRequest(n: Notification, env: Env): Request | null {
     });
   }
 
+  if (provider === "smsdev") {
+    // SMSDev (pré-pago, sem mensalidade). A chave vai no corpo, não na URL.
+    const key = env("SMSDEV_KEY");
+    if (!key) return null;
+    return new Request("https://api.smsdev.com.br/v1/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ key, type: "9", number: digits(n.to_phone), msg: text }).toString(),
+    });
+  }
+
   if (provider === "twilio") {
     const sid = env("TWILIO_SID");
     const auth = env("TWILIO_TOKEN");
@@ -121,6 +132,13 @@ export async function send(n: Notification, env: Env, doFetch: typeof fetch = fe
       let code: unknown;
       try { code = JSON.parse(body).code; } catch { /* resposta inesperada */ }
       return code === 0 ? { status: "enviado" } : { status: "falhou", error: `Mobizon: ${body.slice(0, 300)}` };
+    }
+    // A SMSDev também responde 200 nos erros: o resultado vem em "situacao" ("OK" ou "ERRO").
+    if (res.ok && new URL(req.url).hostname.endsWith("smsdev.com.br")) {
+      const body = await res.text();
+      let situacao: unknown;
+      try { situacao = JSON.parse(body).situacao; } catch { /* resposta inesperada */ }
+      return situacao === "OK" ? { status: "enviado" } : { status: "falhou", error: `SMSDev: ${body.slice(0, 300)}` };
     }
     if (res.ok) return { status: "enviado" };
     return { status: "falhou", error: `HTTP ${res.status}: ${(await res.text()).slice(0, 300)}` };

@@ -135,3 +135,21 @@ test("SMS sai sem acentos (as operadoras estragam os acentos)", async () => {
   const text = new URLSearchParams(await req.text()).get("text");
   assert.equal(text, "ALERTA BEE GUARD: a Caixa 7 (Apiario) foi movimentada as 21:14. Foi voce? Responda em ate 5 minutos");
 });
+
+test("SMS pela SMSDev: chave no corpo e erro lido de \"situacao\"", async () => {
+  const n = { id: 1, to_phone: "+5541996767045", channel: "sms" as const, template: "alerta_movimento",
+    body: "ALERTA BEE GUARD: teste", params: {} };
+  const env = (k: string) => ({ SMS_PROVIDER: "smsdev", SMSDEV_KEY: "k9" } as Record<string, string>)[k];
+  const req = smsRequest(n, env)!;
+  assert.equal(req.url, "https://api.smsdev.com.br/v1/send");
+  const form = new URLSearchParams(await req.text());
+  assert.equal(form.get("key"), "k9");
+  assert.equal(form.get("type"), "9");
+  assert.equal(form.get("number"), "5541996767045");
+  assert.equal(form.get("msg"), "ALERTA BEE GUARD: teste");
+  assert.deepEqual(await send(n, env, async () => new Response('{"situacao":"OK","codigo":"1","id":"7","descricao":"MENSAGEM NA FILA"}')),
+    { status: "enviado" });
+  const r = await send(n, env, async () => new Response('{"situacao":"ERRO","codigo":"400","descricao":"SALDO INSUFICIENTE"}'));
+  assert.equal(r.status, "falhou");
+  assert.match(r.error!, /SALDO INSUFICIENTE/);
+});
