@@ -40,6 +40,17 @@ let ver = "colmeia";        // "colmeia" (lista de caixas) ou "apiario" (agrupad
 try { ver = localStorage.getItem("beeguard-ver") === "apiario" ? "apiario" : "colmeia"; } catch { /* sem armazenamento */ }
 const natural = (x, y) => String(x).localeCompare(String(y), "pt-BR", { numeric: true });
 
+// Cerca virtual: o rastreador aprende sozinho o local do apiário (12 h parado no mesmo lugar).
+function cerca(d) {
+  if (d.home_lat == null) return "aprendendo…";
+  if (d.last_lat == null) return "registrado";
+  const r = Math.PI / 180, dLat = (d.last_lat - d.home_lat) * r, dLon = (d.last_lon - d.home_lon) * r;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(d.home_lat * r) * Math.cos(d.last_lat * r) * Math.sin(dLon / 2) ** 2;
+  const m = 2 * 6371000 * Math.asin(Math.sqrt(a));
+  if (m <= (d.fence_m || 200)) return "no local ✓";
+  return `<span class="erro">FORA: ${m >= 1000 ? (m / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " km" : Math.round(m) + " m"}</span>`;
+}
+
 // Situação do apiário: ataque (2+ caixas em alerta), alerta, manutenção ou protegido.
 function situacaoApiario(ds, alertas) {
   const emAlerta = ds.filter((d) => statusDe(d, alertas)[0] === "alerta");
@@ -95,6 +106,7 @@ document.querySelectorAll("[data-ver]").forEach((b) => b.classList.toggle("ativo
         <div><span>Rastreador</span><b>${esc(d.id)}</b></div>
         <div><span>Última mensagem</span><b>${ago(d.last_seen_at)}</b></div>
         <div><span>Bateria</span><b>${pct === null ? "—" : pct + "%"}</b></div>
+        <div><span>Local do apiário</span><b>${cerca(d)}</b></div>
         <div><span>Sinal do chip</span><b>${d.last_signal == null || d.last_signal === 99 ? "—" : esc(d.last_signal >= 15 ? "bom" : d.last_signal >= 10 ? "médio" : "fraco") + ` (${esc(d.last_signal)}/31)`}</b></div>
       </div>
       ${balanca(d, (pesos || []).filter((p) => p.device_id === d.id), { abertos })}

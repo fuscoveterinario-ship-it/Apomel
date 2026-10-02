@@ -401,4 +401,33 @@ select public.colmeia_ingest_event('CS-0002', 51, 'movimento');
 select pg_temp.check((select count(*) from public.colmeia_alerts where device_id = 'CS-0002') = :alertas_antes + 1,
   'depois do teste, o movimento volta a gerar alerta');
 
+-- 16) Cerca virtual: aprende o local depois de 12 h parado e avisa se a caixa sair de lá.
+update public.colmeia_devices set maintenance_until = null, mode = 'normal', home_lat = null, home_lon = null
+where id = 'CS-0001';
+update public.colmeia_alerts set status = 'encerrado' where device_id = 'CS-0001' and status in ('pendente', 'escalado');
+insert into public.colmeia_events (device_id, seq, type, lat, lon, received_at) values
+  ('CS-0001', 900, 'vida', -25.4000, -49.2000, now() - interval '30 hours'),  -- casa (ativação)
+  ('CS-0001', 901, 'vida', -25.5000, -49.3000, now() - interval '13 hours'),  -- apiário
+  ('CS-0001', 902, 'vida', -25.5002, -49.3001, now() - interval '6 hours');
+select public.colmeia_ingest_event('CS-0001', 903, 'vida', -25.5001, -49.3002);
+select pg_temp.check((select home_lat between -25.5003 and -25.4999 from public.colmeia_devices where id = 'CS-0001'),
+  'local do apiário aprendido (sem usar a posição de casa)');
+select pg_temp.check((select count(*) from public.colmeia_notifications where template = 'cerca_ativa') = 1,
+  'aviso de cerca ativa');
+select public.colmeia_ingest_event('CS-0001', 904, 'vida', -25.5001, -49.3005);
+select pg_temp.check((select count(*) from public.colmeia_alerts where device_id = 'CS-0001'
+                      and status = 'pendente') = 0, 'dentro da cerca não gera alerta');
+select public.colmeia_ingest_event('CS-0001', 905, 'vida', -25.5300, -49.3000);
+select pg_temp.check((select count(*) from public.colmeia_alerts where device_id = 'CS-0001' and status = 'pendente') = 1,
+  'fora da cerca abre alerta');
+select pg_temp.check((select body from public.colmeia_notifications where template = 'fora_da_cerca' and channel = 'sms')
+                     like 'ALERTA BEE GUARD: a Caixa 12 está a 3,3 km do local do Sítio Santa Rita.%', 'texto do alerta da cerca');
+update public.colmeia_alerts set status = 'encerrado' where device_id = 'CS-0001' and status = 'pendente';
+update public.colmeia_devices set maintenance_until = now() + interval '2 hours' where id = 'CS-0001';
+select public.colmeia_ingest_event('CS-0001', 906, 'vida', -25.6000, -49.3000);
+select pg_temp.check((select home_lat is null from public.colmeia_devices where id = 'CS-0001'),
+  'mudança de lugar em manutenção: esquece o local para aprender o novo');
+select pg_temp.check((select count(*) from public.colmeia_alerts where device_id = 'CS-0001' and status = 'pendente') = 0,
+  'mudança em manutenção não gera alerta');
+
 \echo 'TODOS OS TESTES PASSARAM'
