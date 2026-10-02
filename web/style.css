@@ -97,3 +97,5 @@ label.check input { width: auto; margin: 0; }
 .grupo h2 .status { vertical-align: middle; }
 .grupo-alerta { border-color: var(--alerta); background: color-mix(in srgb, var(--alerta) 6%, var(--card)); }
 .bloco-apiario { margin-bottom: 28px; }
+.card h1 { font-size: 26px; }
+.card a:not(.btn) { color: var(--ink); font-weight: bold; }

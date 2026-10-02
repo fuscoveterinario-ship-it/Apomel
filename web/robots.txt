@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /$
+Disallow: /painel.html
+Disallow: /apiarios.html
+Disallow: /ativar.html
+Disallow: /alerta.html
+Disallow: /ver.html
+Disallow: /celular-teste.html
+
+Sitemap: https://beeguard.com.br/sitemap.xml
