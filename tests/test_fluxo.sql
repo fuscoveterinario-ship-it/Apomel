@@ -64,7 +64,7 @@ select pg_temp.check((select count(*) from public.colmeia_notifications
                       where to_phone = '+5541999990001' and template = 'alerta_movimento') = 2,
   'WhatsApp e SMS na fila para o principal');
 select pg_temp.check((select body from public.colmeia_notifications where channel = 'sms' limit 1)
-                     like '%Caixa 12 foi movimentada no Sítio Santa Rita%', 'texto da mensagem');
+                     like 'ALERTA BEE GUARD: a Caixa 12 (Sítio Santa Rita) foi movimentada às __:__. %Local: https://maps.google.com/?q=-25.4%', 'texto da mensagem com hora e mapa');
 
 -- Movimento repetido e reenvio (mesmo seq) não duplicam alerta.
 select public.colmeia_ingest_event('CS-0001', 3, 'movimento');
@@ -359,7 +359,7 @@ select pg_temp.check((select bool_and(mode = 'roubo') from public.colmeia_device
 select pg_temp.check((select count(*) from public.colmeia_notifications where template = 'ataque_apiario') = 2,
   'uma mensagem de ataque (WhatsApp + SMS) para o telefone do apiário');
 select pg_temp.check((select body from public.colmeia_notifications where template = 'ataque_apiario' and channel = 'sms')
-                     like '%ATAQUE AO APIÁRIO Sítio Santa Rita. Caixa 12, Caixa 13 foram movimentadas%', 'texto do ataque');
+                     like '%ATAQUE AO APIÁRIO Sítio Santa Rita às __:__. Caixa 12, Caixa 13 foram movimentadas%', 'texto do ataque');
 select pg_temp.check((select count(*) from public.colmeia_notifications
                       where device_id = 'CS-0002' and template = 'alerta_movimento') = 0, 'sem pergunta "foi você?" no ataque');
 
@@ -421,7 +421,7 @@ select public.colmeia_ingest_event('CS-0001', 905, 'vida', -25.5300, -49.3000);
 select pg_temp.check((select count(*) from public.colmeia_alerts where device_id = 'CS-0001' and status = 'pendente') = 1,
   'fora da cerca abre alerta');
 select pg_temp.check((select body from public.colmeia_notifications where template = 'fora_da_cerca' and channel = 'sms')
-                     like 'ALERTA BEE GUARD: a Caixa 12 está a 3,3 km do local do Sítio Santa Rita.%', 'texto do alerta da cerca');
+                     like 'ALERTA BEE GUARD: a Caixa 12 está a 3,3 km do local do Sítio Santa Rita às __:__.%Local: https://maps.google.com/?q=-25.53%', 'texto do alerta da cerca');
 update public.colmeia_alerts set status = 'encerrado' where device_id = 'CS-0001' and status = 'pendente';
 update public.colmeia_devices set maintenance_until = now() + interval '2 hours' where id = 'CS-0001';
 select public.colmeia_ingest_event('CS-0001', 906, 'vida', -25.6000, -49.3000);

@@ -58,8 +58,10 @@ export function whatsappRequest(n: Notification, env: Env): Request | null {
 
 export function smsRequest(n: Notification, env: Env): Request | null {
   const provider = (env("SMS_PROVIDER") ?? "simulado").toLowerCase();
-  // SMS tem limite de tamanho; a mensagem é curta, mas garantimos 300 caracteres.
-  const text = n.body.length > 300 ? n.body.slice(0, 297) + "..." : n.body;
+  // SMS sem acentos: as operadoras trocam ou somem com eles (ex.: "até" chegava "at "), e sem
+  // acento cabem mais letras em cada SMS. Limite de 450 caracteres (até 3 SMS).
+  const plain = n.body.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const text = plain.length > 450 ? plain.slice(0, 447) + "..." : plain;
 
   if (provider === "zenvia") {
     const token = env("ZENVIA_TOKEN");

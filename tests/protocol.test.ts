@@ -126,3 +126,12 @@ test("SMS pela Mobizon: chave na URL, número só com dígitos e erro lido do co
   assert.doesNotMatch(rede.error!, /k1/);
   assert.equal(smsRequest(n, (k) => (k === "SMS_PROVIDER" ? "mobizon" : undefined)), null);
 });
+
+test("SMS sai sem acentos (as operadoras estragam os acentos)", async () => {
+  const n = { id: 1, to_phone: "+5541996767045", channel: "sms" as const, template: "alerta_movimento",
+    body: "ALERTA BEE GUARD: a Caixa 7 (Apiário) foi movimentada às 21:14. Foi você? Responda em até 5 minutos",
+    params: {} };
+  const req = smsRequest(n, (k) => ({ SMS_PROVIDER: "mobizon", MOBIZON_API_KEY: "k" } as Record<string, string>)[k])!;
+  const text = new URLSearchParams(await req.text()).get("text");
+  assert.equal(text, "ALERTA BEE GUARD: a Caixa 7 (Apiario) foi movimentada as 21:14. Foi voce? Responda em ate 5 minutos");
+});
