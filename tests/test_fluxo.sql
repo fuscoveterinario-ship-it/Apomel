@@ -63,8 +63,10 @@ select pg_temp.check((public.colmeia_ingest_event('CS-0001', 2, 'movimento')->>'
 select pg_temp.check((select count(*) from public.colmeia_notifications
                       where to_phone = '+5541999990001' and template = 'alerta_movimento') = 2,
   'WhatsApp e SMS na fila para o principal');
-select pg_temp.check((select body from public.colmeia_notifications where channel = 'sms' limit 1)
+select pg_temp.check((select body from public.colmeia_notifications where channel = 'sms' and template = 'alerta_movimento' limit 1)
                      like 'ALERTA BEE GUARD: a Caixa 12 (Sítio Santa Rita) foi movimentada às __:__. %Local: https://maps.google.com/?q=-25.4%', 'texto da mensagem com hora e mapa');
+select pg_temp.check((select string_agg(template, ',' order by id) from public.colmeia_notifications where channel = 'sms')
+                     = 'alerta_movimento_curto,alerta_movimento', 'SMS curto (sem link) sai antes do completo');
 
 -- Movimento repetido e reenvio (mesmo seq) não duplicam alerta.
 select public.colmeia_ingest_event('CS-0001', 3, 'movimento');
@@ -457,5 +459,14 @@ do $$ begin
 exception when insufficient_privilege then raise notice 'ok: sem login não cria rastreador de teste';
 end $$;
 reset role;
+
+-- 19) Alerta por SMS em 2 mensagens: primeiro a curta, sem link; depois a completa.
+select pg_temp.check((select string_agg(template, ',' order by id) from public.colmeia_notifications
+                      where alert_id = (select id from public.colmeia_alerts where device_id = 'CS-0001' order by opened_at desc limit 1)
+                        and channel = 'sms' and template like 'alerta_escalado%') = 'alerta_escalado_curto,alerta_escalado',
+  'escalada: SMS curto antes do completo');
+select pg_temp.check((select body not like '%http%' and body like 'ALERTA BEE GUARD: POSSÍVEL ROUBO da Caixa 12 (Sítio Santa Rita), movimentada às __:__ e sem resposta.%'
+                      from public.colmeia_notifications where template = 'alerta_escalado_curto' order by id desc limit 1),
+  'SMS curto sem link e com a hora');
 
 \echo 'TODOS OS TESTES PASSARAM'
